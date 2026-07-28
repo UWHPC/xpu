@@ -36,4 +36,4 @@ inline GlobalId<Dims> global_index() noexcept {
 
 #endif
 
-}
+} // namespace xpu

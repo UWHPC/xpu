@@ -18,12 +18,6 @@
 
 namespace xpu {
 
-// Overflow safe version of (num + den - 1) / den
-template <std::integral T> [[nodiscard]]
-inline constexpr T ceiling_div(T num, T den) {
-  return num / den + (num % den != 0);
-}
-
 // exp / log
 using xstd::exp;   using xstd::expm1;
 using xstd::log;   using xstd::log2;
@@ -64,6 +58,12 @@ using xstd::isfinite; using xstd::isnormal;
 
 // decomposition
 using xstd::ldexp; using xstd::frexp; using xstd::modf;
+
+// Overflow safe version of (num + den - 1) / den
+template <std::integral T> [[nodiscard]]
+inline constexpr T ceiling_div(T num, T den) {
+  return num / den + (num % den != 0);
+}
 
 template <std::floating_point T> CUDA_CALLABLE
 void sincos(T arg, T* s, T* c) {

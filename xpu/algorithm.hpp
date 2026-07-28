@@ -14,7 +14,9 @@
 
 namespace xpu {
 
-namespace kernel {
+using xstd::min; using xstd::max;
+
+namespace detail {
 
 #if defined(XPU_CUDA)
 
@@ -32,7 +34,7 @@ void cudaBackendFill(
 
 #endif
 
-} // namespace xpu::kernel
+} // namespace xpu::detail
 
 template <typename T, typename V>
 inline void fill_n(
@@ -46,7 +48,7 @@ inline void fill_n(
     xpu::num_blocks(size, backendFillThreads.x)
   );
 
-  kernel::cudaBackendFill<<<
+  detail::cudaBackendFill<<<
     backendFillBlocks, backendFillThreads
   >>>(
     ptr, size, value
@@ -57,6 +59,4 @@ inline void fill_n(
 #endif
 }
 
-using xstd::min; using xstd::max;
-
-}
+} // namespace xpu
