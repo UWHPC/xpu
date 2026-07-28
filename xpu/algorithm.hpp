@@ -36,11 +36,11 @@ void cudaBackendFill(
 
 } // namespace xpu::detail
 
-template <typename T, typename V>
+template <typename T>
 inline void fill_n(
   T* RESTRICT ptr, 
   std::size_t size,
-  V value
+  T value
 ) {
 #if defined(XPU_CUDA)
   dim3 backendFillThreads(256);
