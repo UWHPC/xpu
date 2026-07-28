@@ -41,8 +41,7 @@ inline T* alloc(std::size_t count) {
     );
     std::abort();
   }
-
-
+  
   return static_cast<T*>(ptr);
 }
 
