@@ -8,12 +8,6 @@
 
 namespace xpu {
 
-namespace detail {
-
-
-
-} // namespace xpu::detail
-
 template <typename T>
 inline constexpr std::size_t default_align{
   (simd_bytes > alignof(T)) ? simd_bytes : alignof(T)
