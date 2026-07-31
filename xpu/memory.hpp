@@ -10,24 +10,7 @@ namespace xpu {
 
 namespace detail {
 
-template<typename T> [[nodiscard]]
-inline constexpr std::size_t round_up(std::size_t unpadded) {
-  if constexpr (sizeof(T) >= simd_bytes) {
-    return unpadded;
-  } else {
-    return (unpadded + (simd_bytes / sizeof(T)) - 1) & 
-          ~((simd_bytes / sizeof(T)) - 1);
-  }
-}
 
-template <typename T>
-inline void zero_n(T* ptr, std::size_t count) {
-#if defined(XPU_CUDA)
-  cuda_check(cudaMemset(ptr, 0, count * sizeof(T)));
-#else
-  std::fill_n(ptr, count, T{});
-#endif
-}
 
 } // namespace xpu::detail
 
@@ -38,19 +21,26 @@ inline constexpr std::size_t default_align{
 
 template <typename T> [[nodiscard]]
 inline constexpr std::size_t handle_pad(std::size_t unpadded) {
-  if constexpr (xpu::xpu_cuda) { return unpadded; }
-  else { return xpu::detail::round_up<T>(unpadded); }
+  if constexpr (xpu::xpu_cuda || (sizeof(T) >= xpu::simd_bytes)) {
+    return unpadded;
+  } else {
+    constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
+    return xpu::ceiling_div(unpadded, lanes) * lanes;
+  }
 }
 
-template <typename T, std::size_t alignment = default_align<T>> [[nodiscard]]
+template <typename T> [[nodiscard]]
 inline T* alloc(std::size_t count) {
+  static_assert(std::is_trivially_copyable_v<T>);
+  if (count == 0) { return nullptr; }
+
   const auto bytes{count * sizeof(T)};
 
 #if defined(XPU_CUDA)
   void* ptr{};
   if(cudaMalloc(&ptr, bytes) != cudaSuccess) { ptr = nullptr; }
 #else
-  void* ptr{::operator new(bytes, std::align_val_t{alignment}, std::nothrow)};
+  void* ptr{::operator new(bytes, std::align_val_t{default_align<T>}, std::nothrow)};
 #endif
 
   if (!ptr) {
@@ -65,12 +55,12 @@ inline T* alloc(std::size_t count) {
   return static_cast<T*>(ptr);
 }
 
-template <typename T, std::size_t alignment = default_align<T>>
+template <typename T>
 inline void free(void* ptr) {
 #if defined(XPU_CUDA)
   cudaFree(ptr);
 #else
-  ::operator delete(ptr, std::align_val_t(alignment));
+  ::operator delete(ptr, std::align_val_t(default_align<T>));
 #endif
 }
 
@@ -91,13 +81,7 @@ public:
     : data_{}
   { }
 
-  explicit unique_ptr(std::size_t count) {
-    T* ptr{xpu::alloc<T>(count)};
-    xpu::detail::zero_n(ptr, count);
-    data_.reset(ptr);
-  }
-
-  unique_ptr(std::size_t count, T value) {
+  explicit unique_ptr(std::size_t count, T value = T{}) {
     T* ptr{xpu::alloc<T>(count)};
     xpu::fill_n(ptr, count, value);
     data_.reset(ptr);

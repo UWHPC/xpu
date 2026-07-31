@@ -13,6 +13,8 @@ private:
 
 public:
   buffer() : count_{}, data_{} {}
+  buffer(soa&&) noexcept = default;
+  buffer& operator=(buffer&&) noexcept = default;
 
   explicit buffer(std::size_t count)
     : count_{count}
@@ -46,6 +48,8 @@ public:
   const T& operator[](std::size_t i) const {
     return data_.get()[i];
   }
+
+  // TODO: use a span for view.
 };
 
 }

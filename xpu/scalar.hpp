@@ -16,6 +16,8 @@ public:
   explicit scalar(T value)
     : data_{1uz, value}
   { }
+
+  // TODO: handle this completely; likely use some host <-> device.
 };
 
 }

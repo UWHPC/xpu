@@ -87,7 +87,8 @@ T rsqrt(T x) {
 template <std::floating_point T> CUDA_CALLABLE
 T norm3d(T x, T y, T z) {
 #if defined(__CUDA_ARCH__)
-  return ::norm3d(x, y, z);
+  if constexpr (std::is_same_v<T, float>) { return norm3df(x, y, z); }
+  else { return ::norm3d(x, y, z); }
 #else
   return xpu::sqrt(x*x + y*y + z*z);
 #endif
@@ -96,7 +97,8 @@ T norm3d(T x, T y, T z) {
 template <std::floating_point T> CUDA_CALLABLE
 T rnorm3d(T x, T y, T z) {
 #if defined(__CUDA_ARCH__)
-  return ::rnorm3d(x, y, z);
+  if constexpr (std::is_same_v<T, float>) { return ::rnorm3df(x, y, z); }
+  else { return ::rnorm3d(x, y, z); }
 #else
   return T{1} / xpu::norm3d(x, y, z);
 #endif

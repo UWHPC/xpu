@@ -20,16 +20,18 @@ namespace detail {
 
 #if defined(XPU_CUDA)
 
-template <typename T, typename V> __global__
-void cudaBackendFill(
+template <typename T> __global__
+void cudaBackendFillN(
   T* RESTRICT ptr,
   std::size_t size,
-  V value
+  T value
 ) {
-  const auto [i]{xpu::global_index<1>()};
-  if (i >= size) { return; }
+  const auto [first]{xpu::global_index<1>()};
+  const auto [stride]{xpu::global_stride<1>()};
 
-  ptr[i] = value;
+  for (auto i{first}; i < size; i += stride) {
+    ptr[i] = value;
+  }
 }
 
 #endif
@@ -43,13 +45,18 @@ inline void fill_n(
   T value
 ) {
 #if defined(XPU_CUDA)
-  dim3 backendFillThreads(256);
-  dim3 backendFillBlocks(
-    xpu::num_blocks(size, backendFillThreads.x)
-  );
+  if (size == 0) { return; }
 
-  detail::cudaBackendFill<<<
-    backendFillBlocks, backendFillThreads
+  const dim3 threads{256};
+  const dim3 blocks{
+    xpu::min(
+      xpu::num_blocks(size, threads.x),
+      xpu::wave_blocks(detail::cudaBackendFillN<T>, threads.x)
+    )
+  };
+
+  detail::cudaBackendFillN<T><<<
+    blocks, threads
   >>>(
     ptr, size, value
   );

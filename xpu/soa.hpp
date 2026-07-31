@@ -12,21 +12,21 @@ class soa {
 private:
   std::size_t count_;
   std::size_t stride_;
-  xpu::buffer<T> data_;
+  xpu::buffer<T> buffer_;
 
 public:
-  soa() : count_{}, stride_{}, data_{} {}
+  soa() : count_{}, stride_{}, buffer_{} {}
   soa(soa&&) noexcept = default;
   soa& operator=(soa&&) noexcept = default;
 
   explicit soa(std::size_t count)
     : count_{count}
     , stride_{xpu::handle_pad<T>(count)}
-    , data_{num_arrays * stride_}
+    , buffer_{num_arrays * stride_}
   { }
 
   [[nodiscard]]
-  std::size_t size() const {
+  std::size_t count() const {
     return count_;
   }
 
@@ -42,13 +42,15 @@ public:
 
   [[nodiscard]]
   T* operator[](std::size_t arr_idx) {
-    return data_.data() + arr_idx * stride();
+    return buffer_.data() + arr_idx * stride();
   }
 
   [[nodiscard]]
   const T* operator[](std::size_t arr_idx) const {
-    return data_.data() + arr_idx * stride();
+    return buffer_.data() + arr_idx * stride();
   }
+
+  // TODO: use an mdspan for view.
 };
 
 } // namespace xpu
