@@ -3,12 +3,14 @@
 #include <xpu/config.hpp>
 
 #if defined(XPU_CUDA)
+  #include <cuda/std/algorithm>
   #include <cuda/std/cmath>
   #include <cuda/std/cstdlib>
   #include <cuda/std/complex>
   #include <cuda/std/concepts>
   #include <cuda/std/type_traits>
 #else
+  #include <algorithm>
   #include <cmath>
   #include <cstdlib>
   #include <complex>
@@ -41,6 +43,7 @@ using xstd::erf;   using xstd::erfc;
 using xstd::lgamma; using xstd::tgamma;
 
 // magnitude / selection
+using xstd::min; using xstd::max;
 using xstd::abs;   using xstd::fabs;
 using xstd::fmin;  using xstd::fmax;
 
@@ -60,7 +63,7 @@ using xstd::isfinite; using xstd::isnormal;
 using xstd::ldexp; using xstd::frexp; using xstd::modf;
 
 // Overflow safe version of (num + den - 1) / den
-template <std::integral T> [[nodiscard]]
+template <std::unsigned_integral T> [[nodiscard]]
 inline constexpr T ceiling_div(T num, T den) {
   return num / den + (num % den != 0);
 }
@@ -87,7 +90,7 @@ T rsqrt(T x) {
 template <std::floating_point T> CUDA_CALLABLE
 T norm3d(T x, T y, T z) {
 #if defined(__CUDA_ARCH__)
-  if constexpr (std::is_same_v<T, float>) { return norm3df(x, y, z); }
+  if constexpr (std::is_same_v<T, float>) { return ::norm3df(x, y, z); }
   else { return ::norm3d(x, y, z); }
 #else
   return xpu::sqrt(x*x + y*y + z*z);

@@ -8,4 +8,3 @@
 #include <xpu/memory.hpp>
 #include <xpu/scalar.hpp>
 #include <xpu/soa.hpp>
-

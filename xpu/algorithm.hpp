@@ -14,8 +14,6 @@
 
 namespace xpu {
 
-using xstd::min; using xstd::max;
-
 namespace detail {
 
 #if defined(XPU_CUDA)
@@ -45,15 +43,10 @@ inline void fill_n(
   T value
 ) {
 #if defined(XPU_CUDA)
-  if (size == 0) { return; }
+  if (size == 0uz) { return; }
 
-  const dim3 threads{256};
-  const dim3 blocks{
-    xpu::min(
-      xpu::num_blocks(size, threads.x),
-      xpu::wave_blocks(detail::cudaBackendFillN<T>, threads.x)
-    )
-  };
+  const dim3 threads{256u};
+  const dim3 blocks{xpu::blocks<1>(detail::cudaBackendFillN<T>, threads, size)};
 
   detail::cudaBackendFillN<T><<<
     blocks, threads

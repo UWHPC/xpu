@@ -26,7 +26,7 @@ inline constexpr std::size_t handle_pad(std::size_t unpadded) {
 template <typename T> [[nodiscard]]
 inline T* alloc(std::size_t count) {
   static_assert(std::is_trivially_copyable_v<T>);
-  if (count == 0) { return nullptr; }
+  if (count == 0u) { return nullptr; }
 
   const auto bytes{count * sizeof(T)};
 

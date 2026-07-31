@@ -1,0 +1,31 @@
+CompileFlags:
+  CompilationDatabase: build
+  Compiler: clang++
+
+  # nvcc spellings clang rejects
+  Remove:
+    - -forward-unknown-to-host-compiler
+    - --generate-code=*
+    - -Xcompiler=*
+    - -Xcudafe=*
+    - --expt-*
+    - --extended-lambda
+    - -rdc=*
+    - -x
+    - cu
+
+  Add:
+    - -xcuda
+    # default is the device pass, which skips host bodies and hides most errors
+    - --cuda-host-only
+    - --cuda-path=/usr/local/cuda
+    - --cuda-gpu-arch=sm_86
+  # clang 20 caps at CUDA 12.8; 13.3 parses fine once it stops checking
+    - --no-cuda-version-check
+    - -Wno-unknown-cuda-version
+    - -DXPU_CUDA
+  # config.hpp:3 #errors without it
+    - -D__CUDACC__
+  # stripped with -Xcompiler above; without it simd_bytes disagrees with the build
+    - -march=native
+    - -std=c++23

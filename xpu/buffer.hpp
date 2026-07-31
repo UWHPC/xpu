@@ -13,7 +13,7 @@ private:
 
 public:
   buffer() : count_{}, data_{} {}
-  buffer(soa&&) noexcept = default;
+  buffer(buffer&&) noexcept = default;
   buffer& operator=(buffer&&) noexcept = default;
 
   explicit buffer(std::size_t count)

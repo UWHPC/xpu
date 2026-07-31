@@ -18,26 +18,37 @@ inline unsigned int device_SMs() {
         &sms, cudaDevAttrMultiProcessorCount, device
       ));
       return static_cast<unsigned int>(sms);
-    }();
-  }
+    }()
+  };
   return cached;
 }
 
 template <typename Kernel> [[nodiscard]]
-inline unsigned int wave_blocks(Kernel kernel, unsigned int threads, std::size_t smem = 0uz) {
+inline unsigned int wave_blocks(Kernel kernel, dim3 threads, std::size_t smem = 0uz) {
+  auto const thread_budget{threads.x * threads.y * threads.z};
   auto blocks_per_SM{0};
+
   cuda_check(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-    &blocks_per_SM, kernel, static_cast<int>(threads), smem
+    &blocks_per_SM, kernel, static_cast<int>(thread_budget), smem
   ));
-  return device_SMs() * static_cast<unsigned int>(blocks_per_SM);
+
+  return xpu::detail::device_SMs() * static_cast<unsigned int>(blocks_per_SM);
 }
 
 [[nodiscard]]
-inline unsigned int num_blocks(std::size_t n, unsigned int threads) {
-  return static_cast<unsigned int>(ceiling_div<std::size_t>(n, threads));
+inline unsigned int num_blocks(std::size_t size, unsigned int threads) {
+  return static_cast<unsigned int>(xpu::ceiling_div<std::size_t>(size, threads));
 }
 
+template <typename Kernel> [[nodiscard]]
+inline unsigned int blocks_for(Kernel kernel, unsigned int threads, std::size_t size) {
+  return xpu::min(
+    xpu::detail::num_blocks(size, threads),
+    xpu::detail::wave_blocks(kernel, threads)
+  );
 }
+
+} // namespace xpu::detail
 
 template <int Dims> struct Coord;
 template <> struct Coord<1> { std::size_t x{}; };
@@ -80,17 +91,17 @@ inline Coord<Dims> global_stride() noexcept {
 
 // TODO: fix + make this actually do what I want and apply changes to call sites.
 template <int Dims, typename Kernel> [[nodiscard]]
-inline dim3 blocks(std::size_t size, dim3 threads, Kernel kernel) {
+inline dim3 blocks(Kernel kernel, dim3 threads, std::size_t size) {
   dim3 d{};
 
   if constexpr (Dims >= 1) {
-    d.x = xpu::min(xpu::detail::num_blocks(size, threads.x), xpu::detail::wave_blocks(kernel, threads.x));
+    d.x = xpu::detail::blocks_for(kernel, threads.x, size);
   }
   if constexpr (Dims >= 2) {
-    d.y = xpu::min(xpu::detail::num_blocks(size, threads.y), xpu::detail::wave_blocks(kernel, threads.y));
+    d.y = xpu::detail::blocks_for(kernel, threads.y, size);
   }
   if constexpr (Dims >= 3) {
-    d.z = xpu::min(xpu::detail::num_blocks(size, threads.z), xpu::detail::wave_blocks(kernel, threads.z));
+    d.z = xpu::detail::blocks_for(kernel, threads.z, size);
   }
   
   return d;

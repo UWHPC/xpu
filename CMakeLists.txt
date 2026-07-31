@@ -28,6 +28,10 @@ if(XPU_ENABLE_CUDA)
   check_language(CUDA)
 
   if(CMAKE_CUDA_COMPILER)
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+      set(CMAKE_CUDA_ARCHITECTURES native)
+    endif()
+
     enable_language(CUDA)
 
     if(CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 13.3)
@@ -51,10 +55,6 @@ if(XPU_ENABLE_CUDA)
     endif()
 
     set(CMAKE_CUDA_EXTENSIONS OFF)
-
-    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-      set(CMAKE_CUDA_ARCHITECTURES native)
-    endif()
 
     find_package(CUDAToolkit REQUIRED)
 
