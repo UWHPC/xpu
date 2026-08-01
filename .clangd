@@ -6,6 +6,7 @@ CompileFlags:
   Remove:
     - -forward-unknown-to-host-compiler
     - --generate-code=*
+    - -arch=*
     - -Xcompiler=*
     - -Xcudafe=*
     - --expt-*

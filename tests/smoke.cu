@@ -43,8 +43,8 @@ int main() {
 
   xpu::cuda_check(cudaDeviceSynchronize());
 
-  auto* test_soa{new float[soa.storage_size()]{0.0f}};
-  xpu::cuda_check(cudaMemcpy(test_soa, soa[Axis::X], soa.storage_size() * sizeof(float), cudaMemcpyDeviceToHost));
+  auto test_soa{std::make_unique<float[]>(soa.storage_size())};
+  xpu::cuda_check(cudaMemcpy(test_soa.get(), soa[Axis::X], soa.storage_size() * sizeof(float), cudaMemcpyDeviceToHost));
 
   for (auto i{0uz}; i < soa.count(); ++i) {
     const auto d1{test_soa[i] - xpu::rsqrt(val_y * val_y + val_z * val_z)};
@@ -58,11 +58,9 @@ int main() {
     };
 
     if (!pass) {
-      delete[] test_soa;
       return -1;
     }
   }
 
-  delete[] test_soa;
   return 0;
 }
