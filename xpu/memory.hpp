@@ -13,7 +13,7 @@ inline constexpr std::size_t default_align{
   (simd_bytes > alignof(T)) ? simd_bytes : alignof(T)
 };
 
-template <typename T> [[nodiscard]]
+template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr std::size_t handle_pad(std::size_t unpadded) {
   if constexpr (xpu::xpu_cuda || (sizeof(T) >= xpu::simd_bytes)) {
     return unpadded;

@@ -63,7 +63,7 @@ using xstd::isfinite; using xstd::isnormal;
 using xstd::ldexp; using xstd::frexp; using xstd::modf;
 
 // Overflow safe version of (num + den - 1) / den
-template <std::unsigned_integral T> [[nodiscard]]
+template <std::unsigned_integral T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr T ceiling_div(T num, T den) {
   return num / den + (num % den != 0);
 }

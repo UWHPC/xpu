@@ -1,103 +1,178 @@
 # xpu
 
-A portable CPU / GPU library.
+`xpu` is a small, header-only C++ library for code that runs on a CPU or NVIDIA
+CUDA. It provides backend-aware allocation, contiguous buffers,
+structure-of-arrays storage, math helpers, and basic CUDA launch utilities.
 
-The same types and the same call sites compile for the host or for CUDA, so you write the allocation and layout code once instead of wrapping every line in `#ifdef`.
-
-xpu is a portability layer, not a parallel algorithms library. It gives you memory, alignment, layout, and a math surface that works on both sides. It does not try to be Thrust.
-
-**Status: early. The API will change.**
+The project is in early development. The API may change.
 
 ## Requirements
 
 - C++23
-- GCC 14+ (nvcc rejects GCC 13 and MSVC as C++23 hosts, and it does that with a warning plus a silent fallback to C++14, not an error)
-- CUDA 13.3+ and SM 7.5+ for the GPU path
-- Linux, or Windows via WSL2
-- CPU-only builds have no dependencies
+- CMake 3.25 or newer
+- CUDA 13.3 or newer for the CUDA backend
+- A compatible CUDA host compiler, with GCC 14 or newer when GCC is used
+- Linux, or Windows through WSL2, for CUDA builds
 
-## Build
+CPU-only builds have no external dependencies.
+
+## Building
+
+CUDA is enabled by default when CMake finds a CUDA compiler. Set the target GPU
+architecture explicitly:
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_CUDA_HOST_COMPILER=g++-14 \
+cmake -S . -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_COMPILER=g++-14 \
+  -DCMAKE_CUDA_HOST_COMPILER=g++-14 \
   -DCMAKE_CUDA_ARCHITECTURES=86
+
 cmake --build build
 ```
 
-Or consume it directly:
+For a CPU-only build:
+
+```bash
+cmake -S . -B build-cpu -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DXPU_ENABLE_CUDA=OFF
+
+cmake --build build-cpu
+```
+
+To use xpu from another CMake project:
 
 ```cmake
-add_subdirectory(xpu)
+add_subdirectory(external/xpu)
 target_link_libraries(my_target PRIVATE xpu::xpu)
 ```
 
-`XPU_ENABLE_CUDA=OFF` builds the CPU-only path.
+Set `XPU_ENABLE_CUDA` before `add_subdirectory` when you need to select the
+backend explicitly.
 
-## Usage
+## Buffers
+
+`buffer<T>` owns a contiguous allocation. New buffers are initialized with
+`T{}`.
 
 ```cpp
 #include <xpu/xpu.hpp>
 
-enum Grad : std::size_t { X, Y, Z, NUM };
+constexpr auto N{10'000uz};
 
-// NUM arrays of num_particles elements, in one allocation
-xpu::soa<double, Grad::NUM> grad{num_particles};
+xpu::buffer<float> values{N};
+xpu::fill_n(values.data(), values.count(), 1.0f);
 
-my_kernel<<<blocks, threads>>>(grad[Grad::X], grad[Grad::Y], grad.count());
+float* data{values.data()};
+const auto count{values.count()};
+const auto capacity{values.capacity()};
 ```
 
-The enum sentinel pattern is the intended idiom. It names your arrays and gives you the count in one declaration.
+`count()` is the requested number of elements. `capacity()` includes any CPU
+padding.
 
-## The `XPU_CUDA` contract
+## Structure of arrays
 
-Read this part.
+`soa<T, N>` stores `N` equal-length arrays in one allocation. An enum with a
+terminal count value is a convenient way to name the arrays.
 
-`XPU_CUDA` selects the allocator. Define it and `xpu::alloc` calls `cudaMalloc`; leave it undefined and it calls aligned `operator new`. So:
+```cpp
+enum Axis : std::size_t { X, Y, Z, NUM_AXES };
 
-> **`XPU_CUDA` must be defined identically for every translation unit that links together.**
+xpu::soa<float, Axis::NUM_AXES> position{N};
 
-If one TU is compiled with it and another without, one allocates with `cudaMalloc` and the other frees with `operator delete`. That is heap corruption, with no link error and no warning. Set it on the target so it propagates, which is what `xpu::xpu` does for you:
-
-```cmake
-target_compile_definitions(my_lib PUBLIC XPU_CUDA)
+float* x{position[Axis::X]};
+float* y{position[Axis::Y]};
+float* z{position[Axis::Z]};
 ```
 
-`XPU_CUDA` also requires nvcc. Every TU that includes an xpu header has to be a `.cu`, and `config.hpp` `#error`s if it isn't.
+- `count()` returns the logical elements in each array.
+- `stride()` returns the distance between adjacent arrays.
+- `storage_size()` returns the total elements used by the SoA layout.
+- `operator[]` returns a pointer to one array.
 
-## Memory model
+## SoA views
 
-Under `XPU_CUDA` the pointers are **device memory**. `soa::operator[]` returns a `T*` the host cannot dereference.
+`soa_view<T, N>` is a small, non-owning kernel argument containing an SoA base
+pointer and element count.
 
-That's the sharp edge: the signature is an identical `T*` in both builds, but in a CPU build you can read it and in a CUDA build you segfault. Passing it to a kernel is always fine. Touching it from host code is only fine without `XPU_CUDA`.
+```cpp
+__global__
+void add_components(xpu::soa_view<float, Axis::NUM_AXES> position) {
+  const auto [i]{xpu::global_index<1>()};
 
-Allocation failure aborts with the requested byte count rather than throwing. OOM in a solver isn't recoverable, and a core dump at the failure point beats an unwound stack.
+  if (i >= position.count()) {
+    return;
+  }
 
-## Layout and alignment
+  position[Axis::Z][i] =
+    position[Axis::X][i] + position[Axis::Y][i];
+}
 
-`soa<T, N>` packs N arrays into one allocation. Rows are padded up to `xpu::simd_bytes` so every `soa[k]` starts aligned. `count()` is the logical element count, `stride()` is the padded distance between rows, so index with `soa[k][i]` and use `stride()` only if you're doing pointer arithmetic yourself.
+const dim3 threads{256u};
+const dim3 blocks{xpu::block_per_dim(position.count(), threads.x)};
 
-On the CUDA path the padding is dropped deliberately. Coalescing wants a tight stride, and a CUDA allocation is already over-aligned at the base.
-
-`simd_bytes` is detected from the architecture macros your compiler flags set, so it's 64 with AVX-512 and 16 without. Pin it if you need the value stable across machines:
-
+add_components<<<blocks, threads>>>(position.view());
 ```
--DXPU_SIMD_BYTES=64
-```
 
-## What's in it
+A const `soa` produces an `soa_view<const T, N>`. A view does not own memory and
+is valid only while the original `soa` owns the allocation.
 
-| header | |
+## Backend and memory model
+
+`XPU_CUDA` selects the allocation backend:
+
+| Backend | Allocation |
 |---|---|
-| `config.hpp` | backend detection, `cuda_check`, `simd_bytes`, the `xstd` alias |
-| `memory.hpp` | `alloc<T>` / `free<T>` / `zero_n` / `deleter` / `unique_ptr` |
-| `math.hpp` | the `<cmath>` surface, plus `sincos`, `rsqrt`, `norm3d`, `ceiling_div` |
-| `launch.hpp` | `num_blocks`, `global_index<Dims>` |
-| `algorithm.hpp` | `fill_n`, plus `min` / `max` |
-| `soa.hpp` | N arrays of M elements, one allocation, aligned rows |
+| CPU | aligned `operator new` |
+| CUDA | `cudaMalloc` |
 
-`xstd` aliases `cuda::std` under CUDA and `std` otherwise, so `xpu::exp` and `xpu::complex` are host- and device-callable without hand-written wrappers.
+The `xpu::xpu` CMake target sets `XPU_CUDA` for CUDA builds. Do not set it on
+individual source files. It must have the same value in every translation unit
+linked into a program.
+
+When CUDA is enabled, every translation unit that includes an xpu header must be
+compiled by nvcc. These files normally use the `.cu` extension.
+
+CUDA allocations are device memory. Pointers returned by `buffer` and `soa`
+cannot be dereferenced by host code. The library does not currently wrap memory
+transfers, so use the CUDA runtime directly when transfers are required.
+
+Allocation failure terminates the process with `std::abort`.
+
+## Padding
+
+CPU allocations are aligned to at least `xpu::simd_bytes`. Capacities and SoA
+strides are padded to SIMD-lane multiples when the element type is smaller than
+the SIMD width. CUDA uses a tight layout with no row padding.
+
+The default SIMD width is 64 bytes with AVX-512, 32 bytes with AVX or AVX2, and
+16 bytes otherwise. Pin it when layout must remain stable across machines:
+
+```bash
+cmake -S . -B build -DXPU_SIMD_BYTES=64
+```
+
+## Testing
+
+```bash
+./scripts/test.sh             # CUDA smoke test
+./scripts/test.sh --sanitize  # CUDA Compute Sanitizer
+./scripts/test.sh --cpu       # CPU configuration and build
+```
+
+The CPU backend does not yet have a runtime test suite.
+
+## Current limitations
+
+- NVIDIA CUDA is the only GPU backend.
+- CPU and CUDA backends cannot be mixed in one linked program.
+- CUDA memory transfers are not wrapped.
+- Accessors do not perform bounds checking.
+- Multidimensional launch configuration is still a work in progress.
+- Installed CMake package metadata is incomplete.
 
 ## License
 
-See [LICENSE](LICENSE).
+`xpu` is available under the MIT License. See [LICENSE](LICENSE).

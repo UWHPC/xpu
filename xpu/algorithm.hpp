@@ -24,12 +24,10 @@ void cudaBackendFillN(
   std::size_t size,
   T value
 ) {
-  const auto [first]{xpu::global_index<1>()};
-  const auto [stride]{xpu::global_stride<1>()};
+  const auto [i]{xpu::global_index<1>()};
+  if (i >= size) { return; }
 
-  for (auto i{first}; i < size; i += stride) {
-    ptr[i] = value;
-  }
+  ptr[i] = value;
 }
 
 #endif
@@ -46,7 +44,9 @@ inline void fill_n(
   if (size == 0uz) { return; }
 
   const dim3 threads{256u};
-  const dim3 blocks{xpu::blocks<1>(detail::cudaBackendFillN<T>, threads, size)};
+  const dim3 blocks{
+    xpu::block_per_dim(size, threads.x)
+  };
 
   detail::cudaBackendFillN<T><<<
     blocks, threads
