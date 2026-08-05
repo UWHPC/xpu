@@ -72,8 +72,9 @@ inline Coord<Dims> global_index() noexcept {
   return id;
 }
 
+[[nodiscard]]
 inline unsigned int block_per_dim(std::size_t size, unsigned int dim_threads) {
-  return xpu::ceiling_div<unsigned int>(static_cast<int>(size), static_cast<int>(dim_threads));
+  return xpu::detail::num_blocks(size, dim_threads);
 }
 
 template <int Dims> __device__ [[nodiscard]]

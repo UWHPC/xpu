@@ -68,11 +68,21 @@ inline constexpr T ceiling_div(T num, T den) {
   return num / den + (num % den != 0);
 }
 
+// Prefer a combined sin/cos where the platform offers one: it computes both
+// for roughly the cost of a single transcendental.
 template <std::floating_point T> CUDA_CALLABLE
 void sincos(T arg, T* s, T* c) {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
   else { ::sincos(arg, s, c); }
+#elif defined(__APPLE__)
+  if constexpr (std::is_same_v<T, float>) { ::__sincosf(arg, s, c); }
+  else if constexpr (std::is_same_v<T, double>) { ::__sincos(arg, s, c); }
+  else { *s = xpu::sin(arg); *c = xpu::cos(arg); }
+#elif (defined(__GNUC__) || defined(__clang__)) && defined(_GNU_SOURCE)
+  if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
+  else if constexpr (std::is_same_v<T, double>) { ::sincos(arg, s, c); }
+  else { ::sincosl(arg, s, c); }
 #else
   *s = xpu::sin(arg); *c = xpu::cos(arg);
 #endif
