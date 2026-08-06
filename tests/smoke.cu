@@ -1,4 +1,4 @@
-#include <xpu/xpu.hpp>
+#include "test.hpp"
 
 namespace {
 
@@ -17,9 +17,6 @@ enum Axis : std::size_t { X, Y, Z, NUM };
 } // namespace
 
 int main() {
-  constexpr auto N{16'384uz};
-  constexpr auto EPS{1e-5f};
-
   xpu::soa<float, Axis::NUM> soa{N};
 
   xpu::buffer<float> buffer_x{N};

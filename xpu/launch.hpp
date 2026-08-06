@@ -5,7 +5,7 @@
 
 namespace xpu {
 
-#if defined(XPU_CUDA)
+#if defined(XPU_CUDA) && defined(__CUDACC__)
 
 namespace detail {
 
