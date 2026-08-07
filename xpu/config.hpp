@@ -24,8 +24,8 @@ namespace xpu {
 
 #if defined(XPU_CUDA)
 
-inline void cuda_check(
-  cudaError_t result,
+inline void cu_check(
+  auto result,
   std::source_location loc = std::source_location::current()
 ) {
   if (result == cudaSuccess) { return; }

@@ -53,7 +53,7 @@ inline void fill_n(
   >>>(
     ptr, size, value
   );
-  cuda_check(cudaGetLastError());
+  cu_check(cudaGetLastError());
 #else
   std::fill_n(ptr, size, value);
 #endif

@@ -9,17 +9,18 @@
 namespace xpu {
 
 template <typename T>
-inline constexpr std::size_t default_align{
-  (simd_bytes > alignof(T)) ? simd_bytes : alignof(T)
-};
+inline constexpr std::size_t default_align{(xpu::simd_bytes > alignof(T)) ? xpu::simd_bytes : alignof(T)};
+
+template <typename T>
+inline constexpr bool apply_pad{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr std::size_t handle_pad(std::size_t unpadded) {
-  if constexpr (xpu::xpu_cuda || (sizeof(T) >= xpu::simd_bytes)) {
-    return unpadded;
-  } else {
+  if constexpr (apply_pad<T>) {
     constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
     return xpu::ceiling_div(unpadded, lanes) * lanes;
+  } else {
+    return unpadded;
   }
 }
 
@@ -87,5 +88,14 @@ public:
   [[nodiscard]]
   T* get() { return data_.get(); } 
 };
+
+template <typename T> [[nodiscard]] CUDA_CALLABLE
+T* assume_aligned(T* ptr) {
+  if constexpr (apply_pad<T>) {
+    return std::assume_aligned<default_align<T>>(ptr);
+  } else {
+    return ptr;
+  }
+}
 
 } // namespace xpu

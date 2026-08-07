@@ -3,11 +3,21 @@
 #include <xpu/buffer.hpp>
 #include <xpu/config.hpp>
 #include <xpu/memory.hpp>
+
+#if defined(XPU_CUDA)
+  #include <cuda/std/array>
+#else
+  #include <array>
+#endif
+
 #include <cstddef>
+#include <cassert>
 
 namespace xpu {
 
-template <typename T, std::size_t num_arrays>
+using xstd::array;
+
+template <typename T, std::size_t exposed_arrays>
 class soa_view {
 private:
   T* base_;
@@ -32,12 +42,36 @@ public:
 
   [[nodiscard]] CUDA_CALLABLE
   T* operator[](std::size_t arr_idx) {
-    return base_ + arr_idx * stride();
+    assert(arr_idx < exposed_arrays);
+    return xpu::assume_aligned<T>(base_ + arr_idx * stride());
   }
 
   [[nodiscard]] CUDA_CALLABLE
   const T* operator[](std::size_t arr_idx) const {
-    return base_ + arr_idx * stride();
+    assert(arr_idx < exposed_arrays);
+    return xpu::assume_aligned<T>(base_ + arr_idx * stride());
+  }
+
+  [[nodiscard]] CUDA_CALLABLE
+  xpu::array<T*, exposed_arrays> pointers() {
+    xpu::array<T*, exposed_arrays> ptrs{};
+
+    for (auto i{0uz}; i < exposed_arrays; ++i) {
+      ptrs[i] = xpu::assume_aligned<T>(base_ + i * stride());
+    }
+
+    return ptrs;
+  }
+
+  [[nodiscard]] CUDA_CALLABLE
+  xpu::array<const T*, exposed_arrays> pointers() const {
+    xpu::array<const T*, exposed_arrays> ptrs{};
+
+    for (auto i{0uz}; i < exposed_arrays; ++i) {
+      ptrs[i] = xpu::assume_aligned<T>(base_ + i * stride());
+    }
+
+    return ptrs;
   }
 };
 
@@ -70,22 +104,26 @@ public:
 
   [[nodiscard]]
   T* operator[](std::size_t arr_idx) {
-    return buffer_.data() + arr_idx * stride();
+    assert(arr_idx < num_arrays);
+    return xpu::assume_aligned<T>(buffer_.data() + arr_idx * stride());
   }
 
   [[nodiscard]]
   const T* operator[](std::size_t arr_idx) const {
-    return buffer_.data() + arr_idx * stride();
+    assert(arr_idx < num_arrays);
+    return xpu::assume_aligned<T>(buffer_.data() + arr_idx * stride());
   }
 
-  [[nodiscard]]
-  soa_view<T, num_arrays> view() {
-    return soa_view<T, num_arrays>{buffer_.data(), count_};
+  template <std::size_t exposed_arrays = num_arrays, std::size_t first_array = 0uz> [[nodiscard]]
+  soa_view<T, exposed_arrays> view() {
+    static_assert(first_array + exposed_arrays <= num_arrays);
+    return soa_view<T, exposed_arrays>{buffer_.data() + first_array * stride(), count_};
   }
 
-  [[nodiscard]]
-  soa_view<const T, num_arrays> view() const {
-    return soa_view<const T, num_arrays>{buffer_.data(), count_};
+  template <std::size_t exposed_arrays = num_arrays, std::size_t first_array = 0uz> [[nodiscard]]
+  soa_view<const T, exposed_arrays> view() const {
+    static_assert(first_array + exposed_arrays <= num_arrays);
+    return soa_view<const T, exposed_arrays>{buffer_.data() + first_array * stride(), count_};
   }
 };
 

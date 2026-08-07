@@ -13,8 +13,8 @@ namespace detail {
 inline unsigned int device_SMs() {
   static const unsigned int cached{[] {
       auto device{0}, sms{0};
-      xpu::cuda_check(cudaGetDevice(&device));
-      xpu::cuda_check(cudaDeviceGetAttribute(
+      xpu::cu_check(cudaGetDevice(&device));
+      xpu::cu_check(cudaDeviceGetAttribute(
         &sms, cudaDevAttrMultiProcessorCount, device
       ));
       return static_cast<unsigned int>(sms);
@@ -28,7 +28,7 @@ inline unsigned int wave_blocks(Kernel kernel, dim3 threads, std::size_t smem = 
   auto const thread_budget{threads.x * threads.y * threads.z};
   auto blocks_per_SM{0};
 
-  cuda_check(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+  cu_check(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
     &blocks_per_SM, kernel, static_cast<int>(thread_budget), smem
   ));
 

@@ -38,10 +38,10 @@ int main() {
   rnorm_arrays<<<blocks, threads>>>(soa[Axis::Y], buffer_z.data(), buffer_x.data(), N);
   rnorm_arrays<<<blocks, threads>>>(soa[Axis::Z], buffer_x.data(), buffer_y.data(), N);
 
-  xpu::cuda_check(cudaDeviceSynchronize());
+  xpu::cu_check(cudaDeviceSynchronize());
 
   auto test_soa{std::make_unique<float[]>(soa.storage_size())};
-  xpu::cuda_check(cudaMemcpy(test_soa.get(), soa[Axis::X], soa.storage_size() * sizeof(float), cudaMemcpyDeviceToHost));
+  xpu::cu_check(cudaMemcpy(test_soa.get(), soa[Axis::X], soa.storage_size() * sizeof(float), cudaMemcpyDeviceToHost));
 
   for (auto i{0uz}; i < soa.count(); ++i) {
     const auto d1{test_soa[i] - xpu::rsqrt(val_y * val_y + val_z * val_z)};

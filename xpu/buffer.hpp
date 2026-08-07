@@ -29,12 +29,12 @@ public:
 
   [[nodiscard]]
   T* data() {
-    return data_.get();
+    return xpu::assume_aligned<T>(data_.get());
   }
 
   [[nodiscard]]
   const T* data() const {
-    return data_.get();
+    return xpu::assume_aligned<T>(data_.get());
   }
 };
 
