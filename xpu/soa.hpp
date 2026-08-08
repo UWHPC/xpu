@@ -111,7 +111,7 @@ public:
   [[nodiscard]]
   const T* operator[](std::size_t arr_idx) const {
     assert(arr_idx < num_arrays);
-    return xpu::assume_aligned<T>(buffer_.data() + arr_idx * stride());
+    return xpu::assume_aligned<const T>(buffer_.data() + arr_idx * stride());
   }
 
   template <std::size_t exposed_arrays = num_arrays, std::size_t first_array = 0uz> [[nodiscard]]

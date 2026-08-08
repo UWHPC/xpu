@@ -34,7 +34,7 @@ public:
 
   [[nodiscard]]
   const T* data() const {
-    return xpu::assume_aligned<T>(data_.get());
+    return xpu::assume_aligned<const T>(data_.get());
   }
 };
 
