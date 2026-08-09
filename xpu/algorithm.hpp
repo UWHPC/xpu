@@ -9,6 +9,7 @@
 #else
   #include <algorithm>
   #include <cstddef>
+  #include <cstring>
 #endif
 
 
@@ -21,11 +22,11 @@ namespace detail {
 template <typename T> __global__
 void cudaBackendFillN(
   T* RESTRICT ptr,
-  std::size_t size,
+  std::size_t count,
   T value
 ) {
   const auto [i]{xpu::global_index<1>()};
-  if (i >= size) { return; }
+  if (i >= count) { return; }
 
   ptr[i] = value;
 }
@@ -37,25 +38,39 @@ void cudaBackendFillN(
 template <typename T>
 inline void fill_n(
   T* RESTRICT ptr, 
-  std::size_t size,
+  std::size_t count,
   T value
 ) {
 #if defined(XPU_CUDA)
-  if (size == 0uz) { return; }
+  if (count == 0uz) { return; }
 
   const dim3 threads{256u};
   const dim3 blocks{
-    xpu::block_per_dim(size, threads.x)
+    xpu::block_per_dim(count, threads.x)
   };
 
   detail::cudaBackendFillN<T><<<
     blocks, threads
   >>>(
-    ptr, size, value
+    ptr, count, value
   );
-  cu_check(cudaGetLastError());
+  xpu::cu_check(cudaGetLastError());
 #else
-  std::fill_n(ptr, size, value);
+  std::fill_n(ptr, count, value);
+#endif
+}
+
+inline void memset(
+  void* dst,
+  int value,
+  std::size_t bytes
+) {
+  if (bytes == 0uz) { return; }
+
+#if defined(XPU_CUDA)
+  xpu::cu_check(cudaMemset(dst, value, bytes));
+#else
+  std::memset(dst, value, bytes);
 #endif
 }
 

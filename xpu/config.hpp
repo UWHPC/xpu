@@ -24,19 +24,21 @@ namespace xpu {
 
 #if defined(XPU_CUDA)
 
+template <typename Status>
 inline void cu_check(
-  auto result,
+  Status result,
+  Status success = Status{},
   std::source_location loc = std::source_location::current()
 ) {
-  if (result == cudaSuccess) { return; }
+  if (result == success) { return; }
 
   std::fprintf(
     stderr,
     "CUDA error at %s:%u in %s\n  %s\n",
     loc.file_name(),
     loc.line(),
-      loc.function_name(),
-    cudaGetErrorString(result)
+    loc.function_name(),
+    static_cast<int>(result)
   );
 
   std::abort();
