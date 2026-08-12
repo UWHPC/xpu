@@ -60,18 +60,4 @@ inline void fill_n(
 #endif
 }
 
-inline void memset(
-  void* dst,
-  int value,
-  std::size_t bytes
-) {
-  if (bytes == 0uz) { return; }
-
-#if defined(XPU_CUDA)
-  xpu::cu_check(cudaMemset(dst, value, bytes));
-#else
-  std::memset(dst, value, bytes);
-#endif
-}
-
 } // namespace xpu

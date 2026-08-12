@@ -69,7 +69,7 @@ inline constexpr T ceiling_div(T num, T den) {
 }
 
 template <std::floating_point T> CUDA_CALLABLE
-void sincos(T arg, T* s, T* c) {
+void sincos(T arg, T* RESTRICT s, T* RESTRICT c) {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
   else { ::sincos(arg, s, c); }

@@ -90,12 +90,40 @@ public:
 };
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
-T* assume_aligned(T* ptr) {
+inline T* assume_aligned(T* ptr) {
   if constexpr (apply_pad<T>) {
     return std::assume_aligned<default_align<T>>(ptr);
   } else {
     return ptr;
   }
+}
+
+inline void memset(
+  void* RESTRICT dst,
+  int value,
+  std::size_t bytes
+) {
+  if (bytes == 0uz) { return; }
+
+#if defined(XPU_CUDA)
+  xpu::cu_check(cudaMemset(dst, value, bytes));
+#else
+  std::memset(dst, value, bytes);
+#endif
+}
+
+inline void memcpy(
+  void* RESTRICT dst,
+  const void* RESTRICT src,
+  std::size_t bytes
+) {
+  if (bytes == 0uz) { return; }
+
+#if defined(XPU_CUDA)
+  xpu::cu_check(cudaMemcpy(dst, src, bytes, cudaMemcpyDefault));
+#else
+  std::memcpy(dst, src, bytes);
+#endif
 }
 
 } // namespace xpu

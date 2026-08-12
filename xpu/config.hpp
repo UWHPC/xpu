@@ -34,7 +34,7 @@ inline void cu_check(
 
   std::fprintf(
     stderr,
-    "CUDA error at %s:%u in %s\n  %s\n",
+    "CUDA error at %s:%u in %s\n status code: %d\n",
     loc.file_name(),
     loc.line(),
     loc.function_name(),
