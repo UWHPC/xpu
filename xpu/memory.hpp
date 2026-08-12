@@ -15,6 +15,12 @@ template <typename T>
 inline constexpr bool apply_pad{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
+inline constexpr std::size_t bytes(std::size_t count) noexcept {
+  static_assert(std::is_trivially_copyable_v<T>, "ERROR: xpu::bytes requires a trivially copyable type");
+  return count * sizeof(T);
+}
+
+template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr std::size_t handle_pad(std::size_t unpadded) {
   if constexpr (apply_pad<T>) {
     constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
@@ -124,6 +130,33 @@ inline void memcpy(
 #else
   std::memcpy(dst, src, bytes);
 #endif
+}
+
+template <typename T>
+inline void copy_n(
+  T* RESTRICT dst,
+  const T* RESTRICT src,
+  std::size_t count
+) noexcept {
+  static_assert(
+    std::is_trivially_copyable_v<T>,
+    "ERROR: xpu::copy_n requires trivially copyable type"
+  );
+
+  xpu::memcpy(dst, src, xpu::bytes<T>(count));
+}
+
+template <typename T>
+inline void zero_n(
+  T* RESTRICT dst,
+  std::size_t count
+) noexcept {
+  static_assert(
+    std::is_arithmetic_v<T>,
+    "ERROR: xpu::zero_n requires arithmetic type"
+  );
+
+  xpu::memset(dst, 0, xpu::bytes<T>(count));
 }
 
 } // namespace xpu
