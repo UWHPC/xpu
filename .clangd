@@ -1,5 +1,5 @@
 CompileFlags:
-  CompilationDatabase: build
+  CompilationDatabase: build-cuda
   Compiler: clang++
 
   # nvcc spellings clang rejects
@@ -24,9 +24,9 @@ CompileFlags:
   # clang 20 caps at CUDA 12.8; 13.3 parses fine once it stops checking
     - --no-cuda-version-check
     - -Wno-unknown-cuda-version
+    # Match CMAKE_CUDA_HOST_COMPILER instead of clangd selecting GCC 15.
+    - --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14
     - -DXPU_CUDA
-  # config.hpp:3 #errors without it
-    - -D__CUDACC__
   # stripped with -Xcompiler above; without it simd_bytes disagrees with the build
     - -march=native
     - -std=c++23

@@ -95,7 +95,12 @@ if wants cu; then
   if [[ $sanitize == 1 ]]; then
     echo
     echo "=== compute-sanitizer ==="
-    "$(dirname "$nvcc")/compute-sanitizer" --tool memcheck \
-      --error-exitcode 1 build-cuda/tests/xpu_smoke
+    cuda_tests=(build-cuda/tests/xpu_test_*)
+    for test_binary in "${cuda_tests[@]}"; do
+      echo
+      echo "--- $test_binary ---"
+      "$(dirname "$nvcc")/compute-sanitizer" --tool memcheck \
+        --error-exitcode 1 "$test_binary"
+    done
   fi
 fi

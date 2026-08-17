@@ -157,12 +157,17 @@ cmake -S . -B build -DXPU_SIMD_BYTES=64
 ## Testing
 
 ```bash
-./scripts/test.sh             # CUDA smoke test
+./scripts/test.sh             # CPU and CUDA test suites
 ./scripts/test.sh --sanitize  # CUDA Compute Sanitizer
-./scripts/test.sh --cpu       # CPU configuration and build
+./scripts/test.sh --cpp       # CPU test suite only
+./scripts/test.sh --cu        # CUDA test suite only
 ```
 
-The CPU backend does not yet have a runtime test suite.
+Behavioral tests are grouped by component under `tests/`. CPU and CUDA entry
+points are kept separate, while backend-neutral cases live beside them in a
+shared `cases.hpp`. Common test support lives in `tests/support`, umbrella-header
+coverage lives in `tests/integration`, and every exported header also gets a
+compile-only self-containment check.
 
 ## Current limitations
 
