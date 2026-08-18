@@ -12,7 +12,6 @@
   #include <lapacke.h>
 #endif
 
-#include <concepts>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -26,11 +25,6 @@ enum class status {
   success,
   singular
 };
-
-template <typename T>
-concept supported_float =
-  std::same_as<T, float> ||
-  std::same_as<T, double>;
 
 namespace detail {
 

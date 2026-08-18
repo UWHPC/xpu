@@ -1,14 +1,24 @@
+If:
+  PathMatch: .*\.(cpp|cc|cxx)
+
 CompileFlags:
-  CompilationDatabase: build-cpp
+  CompilationDatabase: build-clangd-cpp
+  Add:
+    - --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14
 
 ---
 
 If:
-  PathMatch: .*\.cu(h)?
+  PathExclude: .*\.(cpp|cc|cxx)
 
 CompileFlags:
-  CompilationDatabase: build-cuda
+  CompilationDatabase: build-clangd-cuda
   Remove:
     - -forward-unknown-to-host-compiler
     - -arch=*
     - -Xcompiler=*
+  Add:
+    - -xcuda
+    - --cuda-host-only
+    - --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14
+    - -std=c++23

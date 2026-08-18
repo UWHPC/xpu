@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <concepts>
 #include <source_location>
 
 #if defined(XPU_CUDA)
@@ -58,6 +59,12 @@ inline void cu_check(
   #define CUDA_CALLABLE
 #endif
 
+#if defined(XPU_CUDA)
+  #define DEVICE_ONLY __device__
+#else
+  #define DEVICE_ONLY
+#endif
+
 #ifndef XPU_SIMD_BYTES
   #if defined(__AVX512F__)
     #define XPU_SIMD_BYTES 64
@@ -67,6 +74,11 @@ inline void cu_check(
     #define XPU_SIMD_BYTES 16
   #endif
 #endif
+
+template <typename T>
+concept supported_float =
+  std::same_as<T, float> ||
+  std::same_as<T, double>;
 
 inline constexpr std::size_t simd_bytes{XPU_SIMD_BYTES};
 inline constexpr bool xpu_cuda{

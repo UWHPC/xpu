@@ -46,6 +46,7 @@ foreach(module IN ITEMS
   linear_algebra
   math
   memory
+  random
   soa
   integration
 )
@@ -60,6 +61,7 @@ foreach(header IN ITEMS
   linear_algebra
   math
   memory
+  random
   soa
   xpu
 )
