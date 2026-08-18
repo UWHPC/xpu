@@ -1,0 +1,14 @@
+-xcuda
+--cuda-host-only
+--cuda-path=/usr/local/cuda
+--cuda-gpu-arch=sm_75
+--no-cuda-version-check
+-Wno-unknown-cuda-version
+--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/15
+-isystem/usr/local/cuda-13.3/targets/x86_64-linux/include
+-isystem/usr/local/cuda-13.3/targets/x86_64-linux/include/cccl
+-DXPU_CUDA
+-march=native
+-std=c++23
+-Isrc
+-Ibuild-cuda/_deps/xpu-src

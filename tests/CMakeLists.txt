@@ -15,6 +15,10 @@ function(xpu_configure_test_target target)
 endfunction()
 
 function(xpu_add_backend_test module)
+  if(module STREQUAL "linear_algebra" AND NOT TARGET xpu::linalg)
+    return()
+  endif()
+
   if(XPU_CUDA)
     set(source ${module}/cuda.cu)
   else()
@@ -28,6 +32,9 @@ function(xpu_add_backend_test module)
   set(target xpu_test_${module})
   add_executable(${target} ${source})
   xpu_configure_test_target(${target})
+  if(module STREQUAL "linear_algebra")
+    target_link_libraries(${target} PRIVATE xpu::linalg)
+  endif()
   add_test(NAME ${target} COMMAND ${target})
 endfunction()
 
@@ -36,6 +43,7 @@ foreach(module IN ITEMS
   buffer
   config
   launch
+  linear_algebra
   math
   memory
   soa
@@ -44,19 +52,21 @@ foreach(module IN ITEMS
   xpu_add_backend_test(${module})
 endforeach()
 
-# Keep header self-containment separate from behavioral tests. This list follows
-# the headers exported by xpu/xpu.hpp; linear_algebra.hpp is still a scaffold and
-# is not exported yet.
 foreach(header IN ITEMS
   algorithm
   buffer
   config
   launch
+  linear_algebra
   math
   memory
   soa
   xpu
 )
+  if(header STREQUAL "linear_algebra" AND NOT TARGET xpu::linalg)
+    continue()
+  endif()
+
   if(XPU_CUDA)
     set(extension cu)
   else()
@@ -72,4 +82,7 @@ foreach(header IN ITEMS
   set(target xpu_include_${header})
   add_library(${target} OBJECT ${source})
   xpu_configure_test_target(${target})
+  if(header STREQUAL "linear_algebra")
+    target_link_libraries(${target} PRIVATE xpu::linalg)
+  endif()
 endforeach()

@@ -12,9 +12,10 @@ The project is in early development. The API may change.
 - CMake 3.25 or newer
 - CUDA 13.3 or newer for the CUDA backend
 - A compatible CUDA host compiler, with GCC 14 or newer when GCC is used
+- LAPACKE for the optional CPU linear-algebra component
 - Linux, or Windows through WSL2, for CUDA builds
 
-CPU-only builds have no external dependencies.
+The base CPU-only library has no external dependencies.
 
 ## Building
 
@@ -41,6 +42,19 @@ cmake -S . -B build-cpu -G Ninja \
 cmake --build build-cpu
 ```
 
+Enable the optional linear-algebra component with:
+
+```bash
+sudo apt install liblapacke-dev
+
+cmake -S . -B build-cpu-linalg -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DXPU_ENABLE_CUDA=OFF \
+  -DXPU_ENABLE_LINALG=ON
+
+cmake --build build-cpu-linalg
+```
+
 To use xpu from another CMake project:
 
 ```cmake
@@ -48,8 +62,10 @@ add_subdirectory(external/xpu)
 target_link_libraries(my_target PRIVATE xpu::xpu)
 ```
 
-Set `XPU_ENABLE_CUDA` before `add_subdirectory` when you need to select the
-backend explicitly.
+Link `xpu::linalg` instead when using `<xpu/linear_algebra.hpp>`.
+
+Set `XPU_ENABLE_CUDA` and `XPU_ENABLE_LINALG` before `add_subdirectory` when
+you need to select them explicitly.
 
 ## Buffers
 
@@ -154,6 +170,28 @@ The default SIMD width is 64 bytes with AVX-512, 32 bytes with AVX or AVX2, and
 cmake -S . -B build -DXPU_SIMD_BYTES=64
 ```
 
+## Linear algebra
+
+The optional linear-algebra component provides reusable partial-pivot LU
+factorization for `float` and `double` matrices:
+
+```cpp
+#include <xpu/linear_algebra.hpp>
+
+xpu::linalg::lu_factorization<double> factorization{order, stride};
+
+if (
+  factorization.factorize(matrix) ==
+  xpu::linalg::status::success
+) {
+  factorization.solve(matrix, rhs, solution);
+}
+```
+
+Use `solve()` for linear systems. Use `invert()` only when the inverse itself
+is required. Matrices use row-major layout, and strides are measured in
+elements.
+
 ## Testing
 
 ```bash
@@ -168,6 +206,10 @@ points are kept separate, while backend-neutral cases live beside them in a
 shared `cases.hpp`. Common test support lives in `tests/support`, umbrella-header
 coverage lives in `tests/integration`, and every exported header also gets a
 compile-only self-containment check.
+
+GitHub Actions runs the CPU suite on Ubuntu 24.04. CUDA runtime testing is
+enabled when the repository variable `XPU_CUDA_CI` is `true` and a self-hosted
+Linux x64 runner with the `gpu` label is available.
 
 ## Current limitations
 

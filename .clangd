@@ -1,32 +1,14 @@
 CompileFlags:
-  CompilationDatabase: build-cuda
-  Compiler: clang++
+  CompilationDatabase: build-cpp
 
-  # nvcc spellings clang rejects
+---
+
+If:
+  PathMatch: .*\.cu(h)?
+
+CompileFlags:
+  CompilationDatabase: build-cuda
   Remove:
     - -forward-unknown-to-host-compiler
-    - --generate-code=*
     - -arch=*
     - -Xcompiler=*
-    - -Xcudafe=*
-    - --expt-*
-    - --extended-lambda
-    - -rdc=*
-    - -x
-    - cu
-
-  Add:
-    - -xcuda
-    # default is the device pass, which skips host bodies and hides most errors
-    - --cuda-host-only
-    - --cuda-path=/usr/local/cuda
-    - --cuda-gpu-arch=sm_86
-  # clang 20 caps at CUDA 12.8; 13.3 parses fine once it stops checking
-    - --no-cuda-version-check
-    - -Wno-unknown-cuda-version
-    # Match CMAKE_CUDA_HOST_COMPILER instead of clangd selecting GCC 15.
-    - --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14
-    - -DXPU_CUDA
-  # stripped with -Xcompiler above; without it simd_bytes disagrees with the build
-    - -march=native
-    - -std=c++23

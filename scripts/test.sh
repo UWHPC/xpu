@@ -74,6 +74,7 @@ run() {
     -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_CXX_COMPILER=g++-14
     -DXPU_ENABLE_CUDA=$cuda
+    -DXPU_ENABLE_LINALG=ON
   )
 
   if [[ $cuda == ON ]]; then
