@@ -9,6 +9,14 @@
 namespace {
 
 __global__
+void add_under_contention(int* result, std::size_t count) {
+  const auto [index]{xpu::global_index<1>()};
+  if (index >= count) { return; }
+
+  xpu::atomic_add(result, 1);
+}
+
+__global__
 void compute_inverse_norms(
   float* result,
   const float* a,
@@ -27,6 +35,24 @@ void compute_inverse_norms(
 
 int main() {
   if (const auto status{check_scalar_math_cases()}; status != 0) {
+    return status;
+  }
+
+  xpu::buffer<int> atomic_result{1uz};
+  xpu::fill_n(atomic_result.data(), atomic_result.count(), atomic_add_initial);
+  constexpr auto atomic_threads{64u};
+  const auto atomic_blocks{
+    xpu::block_per_dim(atomic_add_count, atomic_threads)
+  };
+  add_under_contention<<<atomic_blocks, atomic_threads>>>(
+    atomic_result.data(), atomic_add_count
+  );
+  xpu::cu_check(cudaGetLastError());
+  xpu::cu_check(cudaDeviceSynchronize());
+
+  auto host_atomic_result{0};
+  xpu::copy_n(&host_atomic_result, atomic_result.data(), 1uz);
+  if (const auto status{check_atomic_add_result(host_atomic_result)}; status != 0) {
     return status;
   }
 

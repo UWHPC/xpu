@@ -2,6 +2,8 @@
 
 #include <xpu/config.hpp>
 
+#include <atomic>
+
 #if defined(XPU_CUDA)
   #include <cuda/std/algorithm>
   #include <cuda/std/cmath>
@@ -64,12 +66,12 @@ using xstd::ldexp; using xstd::frexp; using xstd::modf;
 
 // Overflow safe version of (num + den - 1) / den
 template <std::unsigned_integral T> [[nodiscard]] CUDA_CALLABLE
-inline constexpr T ceiling_div(T num, T den) {
+inline constexpr T ceiling_div(T num, T den) noexcept {
   return num / den + (num % den != 0);
 }
 
 template <std::floating_point T> CUDA_CALLABLE
-void sincos(T arg, T* RESTRICT s, T* RESTRICT c) {
+inline void sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept  {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
   else { ::sincos(arg, s, c); }
@@ -79,7 +81,7 @@ void sincos(T arg, T* RESTRICT s, T* RESTRICT c) {
 }
 
 template <std::floating_point T> CUDA_CALLABLE
-T rsqrt(T x) {
+inline T rsqrt(T x) noexcept {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::rsqrtf(x); } else { return ::rsqrt(x); }
 #else
@@ -88,7 +90,7 @@ T rsqrt(T x) {
 }
 
 template <std::floating_point T> CUDA_CALLABLE
-T norm3d(T x, T y, T z) {
+inline T norm3d(T x, T y, T z) noexcept {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::norm3df(x, y, z); }
   else { return ::norm3d(x, y, z); }
@@ -97,13 +99,22 @@ T norm3d(T x, T y, T z) {
 #endif
 }
 
-template <std::floating_point T> CUDA_CALLABLE
-T rnorm3d(T x, T y, T z) {
+template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
+inline T rnorm3d(T x, T y, T z) noexcept {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::rnorm3df(x, y, z); }
   else { return ::rnorm3d(x, y, z); }
 #else
   return T{1} / xpu::norm3d(x, y, z);
+#endif
+}
+
+template <typename T> CUDA_CALLABLE
+inline void atomic_add(T* ptr, T value) noexcept {
+#if defined(__CUDA_ARCH__)
+  atomicAdd(ptr, value);
+#else
+  std::atomic_ref<T>(*ptr).fetch_add(value, std::memory_order_relaxed);
 #endif
 }
 

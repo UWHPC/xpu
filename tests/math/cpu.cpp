@@ -3,8 +3,37 @@
 #include <xpu/algorithm.hpp>
 #include <xpu/buffer.hpp>
 
+#include <array>
+#include <thread>
+
+namespace {
+
+int check_atomic_add() {
+  constexpr auto thread_count{8uz};
+  static_assert(atomic_add_count % thread_count == 0uz);
+
+  auto result{atomic_add_initial};
+  {
+    std::array<std::jthread, thread_count> workers;
+    for (auto& worker : workers) {
+      worker = std::jthread{[&result] {
+        for (auto i{0uz}; i < atomic_add_count / thread_count; ++i) {
+          xpu::atomic_add(&result, 1);
+        }
+      }};
+    }
+  }
+
+  return check_atomic_add_result(result);
+}
+
+} // namespace
+
 int main() {
   if (const auto status{check_scalar_math_cases()}; status != 0) {
+    return status;
+  }
+  if (const auto status{check_atomic_add()}; status != 0) {
     return status;
   }
 

@@ -4,6 +4,20 @@
 
 #include <xpu/math.hpp>
 
+inline constexpr int atomic_add_initial{7};
+inline constexpr auto atomic_add_count{4096uz};
+
+inline int check_atomic_add_result(int result) {
+  const auto expected{
+    atomic_add_initial + static_cast<int>(atomic_add_count)
+  };
+  if (result != expected) {
+    return test::fail("xpu::atomic_add failed under contention");
+  }
+
+  return 0;
+}
+
 inline int check_scalar_math_cases() {
   if (xpu::ceiling_div(10u, 3u) != 4u) {
     return test::fail("xpu::ceiling_div failed");
