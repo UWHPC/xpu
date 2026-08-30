@@ -1,5 +1,6 @@
 #pragma once
 
+#include <type_traits>
 #if defined(XPU_CUDA) && !defined(__CUDACC__)
   #error "ERROR: must use nvcc when compiling with the XPU_CUDA flag."
 #endif
@@ -79,6 +80,13 @@ template <typename T>
 concept supported_float =
   std::same_as<T, float> ||
   std::same_as<T, double>;
+
+template <typename T>
+concept arithmetic = 
+  (std::integral<T>        ||
+   std::floating_point<T>) &&
+  !std::same_as<T, bool>   &&
+  !std::same_as<T, char>;
 
 inline constexpr std::size_t simd_bytes{XPU_SIMD_BYTES};
 inline constexpr bool xpu_cuda{

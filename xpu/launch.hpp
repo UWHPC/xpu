@@ -1,7 +1,16 @@
 #pragma once
 
+#include <cstddef>
+#include <type_traits>
+#include <utility>
 #include <xpu/config.hpp>
 #include <xpu/math.hpp>
+
+#if defined(XPU_CUDA)
+  #include <cuda/std/array>
+#else
+  #include <array>
+#endif
 
 namespace xpu {
 
@@ -50,6 +59,16 @@ inline unsigned int blocks_for(Kernel kernel, unsigned int threads, std::size_t 
 
 } // namespace xpu::detail
 
+[[nodiscard]] DEVICE_ONLY
+inline std::size_t linear_index() {
+  return static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+}
+
+[[nodiscard]] DEVICE_ONLY
+inline std::size_t linear_stride() {
+  return static_cast<std::size_t>(gridDim.x) * blockDim.x;
+}
+
 template <int Dims> struct Coord;
 template <> struct Coord<1> { std::size_t x{}; };
 template <> struct Coord<2> { std::size_t x{}, y{}; };
@@ -93,24 +112,109 @@ inline Coord<Dims> global_stride() noexcept {
   return stride;
 }
 
-// TODO: fix + make this actually do what I want and apply changes to call sites.
-template <int Dims, typename Kernel> [[nodiscard]]
-inline dim3 blocks(Kernel kernel, dim3 threads, std::size_t size) {
-  dim3 d{};
+#endif
 
-  if constexpr (Dims >= 1) {
-    d.x = xpu::detail::blocks_for(kernel, threads.x, size);
+using xstd::array;
+
+template <std::size_t dims>
+struct [[nodiscard]] range {
+  xpu::array<std::size_t, dims> begin;
+  xpu::array<std::size_t, dims> end;
+  xpu::array<std::size_t, dims> step;
+};
+
+namespace detail {
+
+template <std::size_t dims>
+inline constexpr std::size_t num_itrs(
+  const xpu::range<dims>& range
+) {
+  static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
+  auto total{1uz};
+
+  for (auto d{0uz}; d < dims; ++d) {
+    if (range.step[d] == 0uz || range.begin[d] >= range.end[d]) {
+      return 0uz;
+    }
+
+    const auto delta{range.end[d] - range.begin[d]};
+    const auto count{xpu::ceiling_div(delta, range.step[d])};
+    total *= count;
   }
-  if constexpr (Dims >= 2) {
-    d.y = xpu::detail::blocks_for(kernel, threads.y, size);
-  }
-  if constexpr (Dims >= 3) {
-    d.z = xpu::detail::blocks_for(kernel, threads.z, size);
-  }
-  
-  return d;
+
+  return total;
 }
 
+template <std::size_t dims> CUDA_CALLABLE
+inline xpu::array<std::size_t, dims> itr_index(
+  const xpu::range<dims>& range,
+  std::size_t linear
+) {
+  static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
+  xpu::array<std::size_t, dims> index{};
+
+  for (auto d{dims}; d-- > 0uz;) {
+    const auto delta{range.end[d] - range.begin[d]};
+    const auto count{xpu::ceiling_div(delta, range.step[d])};
+
+    index[d] = range.begin[d] + (linear % count) * range.step[d];
+    linear /= count;
+  }
+
+  return index;
+}
+
+#if defined(XPU_CUDA)
+template <std::size_t dims, typename F> __global__
+inline void parallelForLaunchImpl(
+  xpu::range<dims> range,
+  std::size_t total,
+  F fcn
+) {
+  for (
+    auto linear{xpu::linear_index()};
+    linear < total;
+    linear += xpu::linear_stride()
+  ) {
+    fcn(xpu::detail::itr_index(range, linear));
+  }
+}
 #endif
+
+} // namespace xpu::detail
+
+template <std::size_t dims, typename F>
+inline void parallel_for(
+  const xpu::range<dims>& range,
+  F&& fcn
+) {
+  static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
+
+  const auto total{xpu::detail::num_itrs(range)};
+  if (total == 0uz) { return; }
+
+#if defined(XPU_CUDA)
+  using function_t = std::decay_t<F>;
+
+  constexpr auto gpuThreads{256u};
+  const auto gpuBlocks{xpu::detail::blocks_for(
+    xpu::detail::parallelForLaunchImpl<dims, function_t>,
+    gpuThreads,
+    total
+  )};
+
+  xpu::detail::parallelForLaunchImpl<dims, function_t><<<
+    gpuBlocks, gpuThreads
+  >>>(
+    range, total, function_t{std::forward<F>(fcn)}
+  );
+  xpu::cu_check(cudaGetLastError());
+#else
+  #pragma omp parallel for
+  for (auto linear = 0uz; linear < total; ++linear) {
+    fcn(xpu::detail::itr_index(range, linear));
+  }
+#endif
+}
 
 } // namespace xpu

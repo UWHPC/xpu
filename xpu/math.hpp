@@ -109,7 +109,7 @@ inline T rnorm3d(T x, T y, T z) noexcept {
 #endif
 }
 
-template <typename T> CUDA_CALLABLE
+template <arithmetic T> CUDA_CALLABLE
 inline void atomic_add(T* ptr, T value) noexcept {
 #if defined(__CUDA_ARCH__)
   atomicAdd(ptr, value);
