@@ -43,6 +43,18 @@ if ! [[ -x $nvcc ]]; then
   nvcc=$(command -v nvcc || true)
 fi
 
+cxx=${CXX:-}
+if [[ -z $cxx ]]; then
+  cxx=$(command -v g++-15 || command -v g++ || true)
+elif [[ $cxx != /* ]]; then
+  cxx=$(command -v "$cxx" || true)
+fi
+
+if [[ -z $cxx || ! -x $cxx ]]; then
+  echo "xpu: no C++ compiler found; set CXX to a C++23 compiler" >&2
+  exit 2
+fi
+
 # a CUDA-less configure silently falls back to smoke.cpp, which would look like
 # the .cu path passing when it never got compiled
 if wants cu && [[ -z $nvcc ]]; then
@@ -72,13 +84,16 @@ run() {
   local args=(
     -S . -B "$build" -G Ninja
     -DCMAKE_BUILD_TYPE=Release
-    -DCMAKE_CXX_COMPILER=g++-14
+    -DCMAKE_CXX_COMPILER="$cxx"
     -DXPU_ENABLE_CUDA=$cuda
     -DXPU_ENABLE_LINALG=ON
   )
 
   if [[ $cuda == ON ]]; then
-    args+=(-DCMAKE_CUDA_HOST_COMPILER=g++-14)
+    args+=(
+      -DCMAKE_CUDA_COMPILER="$nvcc"
+      -DCMAKE_CUDA_HOST_COMPILER="$cxx"
+    )
   fi
 
   cmake "${args[@]}"

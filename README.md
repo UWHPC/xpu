@@ -11,7 +11,7 @@ The project is in early development. The API may change.
 - C++23
 - CMake 3.25 or newer
 - CUDA 13.3 or newer for the CUDA backend
-- A compatible CUDA host compiler, with GCC 14 or newer when GCC is used
+- A compatible CUDA host compiler, with GCC 15 or newer when GCC is used
 - LAPACKE for the optional CPU linear-algebra component
 - Linux, or Windows through WSL2, for CUDA builds
 
@@ -25,8 +25,8 @@ architecture explicitly:
 ```bash
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_COMPILER=g++-14 \
-  -DCMAKE_CUDA_HOST_COMPILER=g++-14 \
+  -DCMAKE_CXX_COMPILER=g++-15 \
+  -DCMAKE_CUDA_HOST_COMPILER=g++-15 \
   -DCMAKE_CUDA_ARCHITECTURES=86
 
 cmake --build build

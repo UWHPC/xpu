@@ -12,7 +12,7 @@ template <typename T>
 inline constexpr std::size_t default_align{(xpu::simd_bytes > alignof(T)) ? xpu::simd_bytes : alignof(T)};
 
 template <typename T>
-inline constexpr bool apply_pad{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
+inline constexpr bool is_padded{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr std::size_t bytes(std::size_t count) noexcept {
@@ -21,8 +21,8 @@ inline constexpr std::size_t bytes(std::size_t count) noexcept {
 }
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
-inline constexpr std::size_t handle_pad(std::size_t unpadded) {
-  if constexpr (apply_pad<T>) {
+inline constexpr std::size_t handle_pad(std::size_t unpadded) noexcept {
+  if constexpr (is_padded<T>) {
     constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
     return xpu::ceiling_div(unpadded, lanes) * lanes;
   } else {
@@ -89,15 +89,15 @@ public:
   }
 
   [[nodiscard]]
-  const T* get() const { return data_.get(); } 
+  const T* get() const noexcept { return data_.get(); }
 
   [[nodiscard]]
-  T* get() { return data_.get(); } 
+  T* get() noexcept { return data_.get(); }
 };
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
-inline T* assume_aligned(T* ptr) {
-  if constexpr (apply_pad<T>) {
+inline T* assume_aligned(T* ptr) noexcept {
+  if constexpr (is_padded<T>) {
     return std::assume_aligned<default_align<T>>(ptr);
   } else {
     return ptr;

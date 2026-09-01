@@ -42,16 +42,16 @@ if(XPU_ENABLE_CUDA)
     endif()
 
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
-       AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14)
+       AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15)
       message(FATAL_ERROR
         "nvcc rejects GCC ${CMAKE_CXX_COMPILER_VERSION} as a C++23 host compiler and "
-        "silently downgrades to C++14. Use GCC 14+, e.g. "
-        "-DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_CUDA_HOST_COMPILER=g++-14")
+        "silently downgrades to C++15. Use GCC 15+, e.g. "
+        "-DCMAKE_CXX_COMPILER=g++-15 -DCMAKE_CUDA_HOST_COMPILER=g++-15")
     endif()
 
     if(MSVC)
       message(FATAL_ERROR
-        "MSVC has no /std:c++23, so nvcc ignores -std=c++23 and falls back to C++14. "
+        "MSVC has no /std:c++23, so nvcc ignores -std=c++23 and falls back to C++15. "
         "Build the CUDA path under WSL2 or Linux.")
     endif()
 

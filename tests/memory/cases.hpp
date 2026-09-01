@@ -41,7 +41,7 @@ inline int run_memory_cases() {
   if (padded < test::count) {
     return test::fail("xpu::handle_pad reduced the requested size");
   }
-  if constexpr (xpu::apply_pad<int>) {
+  if constexpr (xpu::is_padded<int>) {
     if (padded % (xpu::simd_bytes / sizeof(int)) != 0uz) {
       return test::fail("xpu::handle_pad produced a partial SIMD lane");
     }

@@ -18,22 +18,22 @@ public:
   { }
 
   [[nodiscard]]
-  std::size_t count() const {
+  std::size_t count() const noexcept {
     return count_;
   }
 
   [[nodiscard]]
-  std::size_t capacity() const {
+  std::size_t capacity() const noexcept {
     return xpu::handle_pad<T>(count_);
   }
 
   [[nodiscard]]
-  T* data() {
+  T* data() noexcept {
     return xpu::assume_aligned<T>(data_.get());
   }
 
   [[nodiscard]]
-  const T* data() const {
+  const T* data() const noexcept {
     return xpu::assume_aligned<const T>(data_.get());
   }
 };
