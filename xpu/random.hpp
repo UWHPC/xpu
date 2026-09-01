@@ -24,12 +24,12 @@ private:
   curandStatePhilox4_32_10_t engine_;
 
   [[nodiscard]] DEVICE_ONLY
-  std::uint32_t next_u32() {
+  auto next_u32() -> std::uint32_t {
     return curand(&engine_);
   }
 
   [[nodiscard]] DEVICE_ONLY
-  std::uint64_t next_u64() {
+  auto next_u64() -> std::uint64_t {
     const auto high{static_cast<std::uint64_t>(next_u32())};
     const auto low{static_cast<std::uint64_t>(next_u32())};
     return (high << 32u) | low;
@@ -40,11 +40,11 @@ private:
 
 public:
   DEVICE_ONLY
-  void seed(
+  auto seed(
     std::uint64_t master_seed,
     std::uint64_t stream_id = 0,
     std::uint64_t offset = 0
-  ) {
+  ) -> void {
 #if defined(XPU_CUDA)
     curand_init(master_seed, stream_id, offset, &engine_);
 #else
@@ -60,7 +60,7 @@ public:
   }
 
   template <supported_float T> [[nodiscard]] DEVICE_ONLY
-  T uniform() {
+  auto uniform() -> T {
 #if defined(XPU_CUDA)
     if constexpr (std::same_as<T, float>) {
       return T{1} - curand_uniform(&engine_);
@@ -73,7 +73,7 @@ public:
   }
 
   template <supported_float T> [[nodiscard]] DEVICE_ONLY
-  T uniform(T minimum, T maximum) {
+  auto uniform(T minimum, T maximum) -> T {
     assert(minimum < maximum);
     const auto value{minimum + (maximum - minimum) * uniform<T>()};
     if (value < maximum) { return value; }
@@ -90,7 +90,7 @@ public:
   }
 
   [[nodiscard]] DEVICE_ONLY
-  std::size_t uniform_index(std::size_t upper_bound) {
+  auto uniform_index(std::size_t upper_bound) -> std::size_t {
     assert(upper_bound != 0uz);
 
 #if defined(XPU_CUDA)

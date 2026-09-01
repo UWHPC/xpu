@@ -20,11 +20,11 @@ namespace detail {
 #if defined(XPU_CUDA)
 
 template <typename T> __global__
-void cudaBackendFillN(
+auto cudaBackendFillN(
   T* RESTRICT ptr,
   std::size_t count,
   T value
-) {
+) -> void {
   const auto [i]{xpu::global_index<1>()};
   if (i >= count) { return; }
 
@@ -36,11 +36,11 @@ void cudaBackendFillN(
 } // namespace xpu::detail
 
 template <typename T>
-inline void fill_n(
+inline auto fill_n(
   T* RESTRICT ptr, 
   std::size_t count,
   T value
-) {
+) -> void {
 #if defined(XPU_CUDA)
   if (count == 0uz) { return; }
 

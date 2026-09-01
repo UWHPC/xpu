@@ -19,7 +19,7 @@ namespace xpu {
 namespace detail {
 
 [[nodiscard]]
-inline unsigned int device_SMs() {
+inline auto device_SMs() -> unsigned int {
   static const unsigned int cached{[] {
       auto device{0}, sms{0};
       xpu::cu_check(cudaGetDevice(&device));
@@ -33,7 +33,7 @@ inline unsigned int device_SMs() {
 }
 
 template <typename Kernel> [[nodiscard]]
-inline unsigned int wave_blocks(Kernel kernel, dim3 threads, std::size_t smem = 0uz) {
+inline auto wave_blocks(Kernel kernel, dim3 threads, std::size_t smem = 0uz) -> unsigned int {
   auto const thread_budget{threads.x * threads.y * threads.z};
   auto blocks_per_SM{0};
 
@@ -45,12 +45,12 @@ inline unsigned int wave_blocks(Kernel kernel, dim3 threads, std::size_t smem = 
 }
 
 [[nodiscard]]
-inline unsigned int num_blocks(std::size_t size, unsigned int threads) {
+inline constexpr auto num_blocks(std::size_t size, unsigned int threads) noexcept -> unsigned int {
   return static_cast<unsigned int>(xpu::ceiling_div<std::size_t>(size, threads));
 }
 
 template <typename Kernel> [[nodiscard]]
-inline unsigned int blocks_for(Kernel kernel, unsigned int threads, std::size_t size) {
+inline auto blocks_for(Kernel kernel, unsigned int threads, std::size_t size) -> unsigned int {
   return xpu::min(
     xpu::detail::num_blocks(size, threads),
     xpu::detail::wave_blocks(kernel, threads)
@@ -60,12 +60,12 @@ inline unsigned int blocks_for(Kernel kernel, unsigned int threads, std::size_t 
 } // namespace xpu::detail
 
 [[nodiscard]] DEVICE_ONLY
-inline std::size_t linear_index() {
+inline auto linear_index() noexcept -> std::size_t {
   return static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
 }
 
 [[nodiscard]] DEVICE_ONLY
-inline std::size_t linear_stride() {
+inline auto linear_stride() noexcept -> std::size_t {
   return static_cast<std::size_t>(gridDim.x) * blockDim.x;
 }
 
@@ -75,7 +75,7 @@ template <> struct Coord<2> { std::size_t x{}, y{}; };
 template <> struct Coord<3> { std::size_t x{}, y{}, z{}; };
 
 template <int Dims> __device__ [[nodiscard]]
-inline Coord<Dims> global_index() noexcept {
+inline auto global_index() noexcept -> Coord<Dims> {
   Coord<Dims> id{};
   
   if constexpr (Dims >= 1) {
@@ -91,12 +91,12 @@ inline Coord<Dims> global_index() noexcept {
   return id;
 }
 
-inline unsigned int block_per_dim(std::size_t size, unsigned int dim_threads) {
+inline constexpr auto block_per_dim(std::size_t size, unsigned int dim_threads) noexcept -> unsigned int {
   return xpu::ceiling_div<unsigned int>(static_cast<int>(size), static_cast<int>(dim_threads));
 }
 
 template <int Dims> __device__ [[nodiscard]]
-inline Coord<Dims> global_stride() noexcept {
+inline auto global_stride() noexcept -> Coord<Dims> {
   Coord<Dims> stride{};
   
   if constexpr (Dims >= 1) {
@@ -126,9 +126,9 @@ struct [[nodiscard]] range {
 namespace detail {
 
 template <std::size_t dims>
-inline constexpr std::size_t num_itrs(
+inline constexpr auto num_itrs(
   const xpu::range<dims>& range
-) {
+) noexcept -> std::size_t {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
   auto total{1uz};
 
@@ -146,10 +146,10 @@ inline constexpr std::size_t num_itrs(
 }
 
 template <std::size_t dims> CUDA_CALLABLE
-inline xpu::array<std::size_t, dims> itr_index(
+inline constexpr auto itr_index(
   const xpu::range<dims>& range,
   std::size_t linear
-) {
+) noexcept -> xpu::array<std::size_t, dims> {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
   xpu::array<std::size_t, dims> index{};
 
@@ -166,11 +166,11 @@ inline xpu::array<std::size_t, dims> itr_index(
 
 #if defined(XPU_CUDA)
 template <std::size_t dims, typename F> __global__
-inline void parallelForLaunchImpl(
+auto parallelForLaunchImpl(
   xpu::range<dims> range,
   std::size_t total,
   F fcn
-) {
+) -> void {
   for (
     auto linear{xpu::linear_index()};
     linear < total;
@@ -184,10 +184,10 @@ inline void parallelForLaunchImpl(
 } // namespace xpu::detail
 
 template <std::size_t dims, typename F>
-inline void parallel_for(
+inline auto parallel_for(
   const xpu::range<dims>& range,
   F&& fcn
-) {
+) -> void {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
 
   const auto total{xpu::detail::num_itrs(range)};

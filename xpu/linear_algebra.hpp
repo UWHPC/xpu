@@ -29,7 +29,7 @@ enum class status {
 namespace detail {
 
 [[noreturn]]
-inline void linalg_error(const char* message) {
+inline auto linalg_error(const char* message) noexcept -> void {
   std::fprintf(
     stderr,
     "xpu: %s\n",
@@ -41,11 +41,11 @@ inline void linalg_error(const char* message) {
 #if defined(XPU_CUDA)
 
 template <supported_float T> __global__
-void cudaBuildIdentity(
+auto cudaBuildIdentity(
   std::size_t order,
   std::size_t stride,
   T* RESTRICT matrix
-) {
+) -> void {
   const auto [i]{xpu::global_index<1>()};
   const auto size{order * order};
   if (i >= size) { return; }
@@ -59,11 +59,11 @@ void cudaBuildIdentity(
 }
 
 template <supported_float T> __global__
-void cudaTransposeSquare(
+auto cudaTransposeSquare(
   std::size_t order,
   std::size_t stride,
   T* RESTRICT matrix
-) {
+) -> void {
   const auto [column, row]{xpu::global_index<2>()};
   if (row >= order || column >= order || row >= column) { return; }
 
@@ -75,18 +75,18 @@ void cudaTransposeSquare(
   matrix[row_idx] = tmp;
 }
 
-inline cusolverDnHandle_t create_cusolver_handle() {
+inline auto create_cusolver_handle() -> cusolverDnHandle_t {
   cusolverDnHandle_t handle{};
   xpu::cu_check(cusolverDnCreate(&handle));
   return handle;
 }
 
 template <supported_float T>
-inline std::size_t getrf_workspace_size(
+inline auto getrf_workspace_size(
   cusolverDnHandle_t handle,
   std::size_t order,
   std::size_t stride
-) {
+) -> std::size_t {
   auto size{0};
 
   if constexpr (std::same_as<T, float>) {
@@ -109,7 +109,7 @@ inline std::size_t getrf_workspace_size(
 }
 
 template <supported_float T>
-inline void cusolver_getrf(
+inline auto cusolver_getrf(
   cusolverDnHandle_t handle,
   std::size_t order,
   std::size_t stride,
@@ -117,7 +117,7 @@ inline void cusolver_getrf(
   T* workspace,
   int* pivot,
   int* info
-) {
+) -> void {
   if constexpr (std::same_as<T, float>) {
     xpu::cu_check(cusolverDnSgetrf(
       handle,
@@ -136,7 +136,7 @@ inline void cusolver_getrf(
 }
 
 template <supported_float T>
-inline void cusolver_getrs(
+inline auto cusolver_getrs(
   cusolverDnHandle_t handle,
   cublasOperation_t operation,
   std::size_t order,
@@ -147,7 +147,7 @@ inline void cusolver_getrs(
   T* solution,
   std::size_t solution_stride,
   int* info
-) {
+) -> void {
   if constexpr (std::same_as<T, float>) {
     xpu::cu_check(cusolverDnSgetrs(
       handle, operation,
@@ -172,12 +172,12 @@ inline void cusolver_getrs(
 #else
 
 template <supported_float T>
-inline lapack_int lapacke_getrf(
+inline auto lapacke_getrf(
   T* RESTRICT matrix,
   lapack_int* RESTRICT pivot,
   std::size_t order,
   std::size_t stride
-) {
+) -> lapack_int {
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetrf(
       LAPACK_ROW_MAJOR,
@@ -196,12 +196,12 @@ inline lapack_int lapacke_getrf(
 }
 
 template <supported_float T>
-inline lapack_int lapacke_getri(
+inline auto lapacke_getri(
   T* RESTRICT inverse,
   const lapack_int* RESTRICT pivot,
   std::size_t order,
   std::size_t stride
-) {
+) -> lapack_int {
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetri(
       LAPACK_ROW_MAJOR,
@@ -220,13 +220,13 @@ inline lapack_int lapacke_getri(
 }
 
 template <supported_float T>
-inline lapack_int lapacke_getrs(
+inline auto lapacke_getrs(
   const T* RESTRICT lower_upper,
   const lapack_int* RESTRICT pivot,
   T* RESTRICT solution,
   std::size_t order,
   std::size_t stride
-) {
+) -> lapack_int {
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetrs(
       LAPACK_ROW_MAJOR, 'N',
@@ -251,11 +251,11 @@ inline lapack_int lapacke_getrs(
 } // namespace xpu::linalg::detail
 
 template <supported_float T>
-inline void transpose_square(
+inline auto transpose_square(
   T* RESTRICT matrix,
   std::size_t order,
   std::size_t stride
-) noexcept {
+) noexcept -> void {
   if (order == 0uz) { return; }
 
 #if defined(XPU_CUDA)
@@ -324,17 +324,17 @@ public:
   }
 
   [[nodiscard]]
-  std::size_t order() const noexcept {
+  constexpr auto order() const noexcept -> std::size_t {
     return order_;
   }
 
   [[nodiscard]]
-  std::size_t stride() const noexcept {
+  constexpr auto stride() const noexcept -> std::size_t {
     return stride_;
   }
 
   [[nodiscard]]
-  status factorize(T* RESTRICT matrix) noexcept {
+  auto factorize(T* RESTRICT matrix) noexcept -> status {
     lower_upper_ = nullptr;
 
 #if defined(XPU_CUDA)
@@ -365,11 +365,11 @@ public:
     return status::success;
   }
 
-  void solve(
+  auto solve(
     const T* RESTRICT lower_upper,
     const T* RESTRICT rhs,
     T* RESTRICT solution
-  ) noexcept {
+  ) noexcept -> void {
     if (lower_upper != lower_upper_) {
       detail::linalg_error(
         "solve requires the most recently factorized matrix"
@@ -409,10 +409,10 @@ public:
 #endif
   }
 
-  void invert(
+  auto invert(
     const T* RESTRICT lower_upper,
     T* RESTRICT inverse
-  ) noexcept {
+  ) noexcept -> void {
     if (lower_upper != lower_upper_) {
       detail::linalg_error(
         "invert requires the most recently factorized matrix"
@@ -469,9 +469,9 @@ public:
 #endif
   }
 
-  lu_factorization& operator=(const lu_factorization&) = delete;
+  auto operator=(const lu_factorization&) -> lu_factorization& = delete;
   lu_factorization(const lu_factorization&) = delete;
-  lu_factorization& operator=(lu_factorization&&) = delete;
+  auto operator=(lu_factorization&&) -> lu_factorization& = delete;
   lu_factorization(lu_factorization&&) = delete;
 };
 

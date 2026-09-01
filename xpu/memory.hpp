@@ -15,13 +15,13 @@ template <typename T>
 inline constexpr bool is_padded{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
-inline constexpr std::size_t bytes(std::size_t count) noexcept {
+inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
   static_assert(std::is_trivially_copyable_v<T>, "ERROR: xpu::bytes requires a trivially copyable type");
   return count * sizeof(T);
 }
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
-inline constexpr std::size_t handle_pad(std::size_t unpadded) noexcept {
+inline constexpr auto handle_pad(std::size_t unpadded) noexcept -> std::size_t {
   if constexpr (is_padded<T>) {
     constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
     return xpu::ceiling_div(unpadded, lanes) * lanes;
@@ -31,7 +31,7 @@ inline constexpr std::size_t handle_pad(std::size_t unpadded) noexcept {
 }
 
 template <typename T> [[nodiscard]]
-inline T* alloc(std::size_t count) {
+inline auto alloc(std::size_t count) -> T* {
   static_assert(std::is_trivially_copyable_v<T>);
   if (count == 0u) { return nullptr; }
 
@@ -57,7 +57,7 @@ inline T* alloc(std::size_t count) {
 }
 
 template <typename T>
-inline void free(void* ptr) {
+inline auto free(void* ptr) noexcept -> void {
 #if defined(XPU_CUDA)
   cudaFree(ptr);
 #else
@@ -67,7 +67,7 @@ inline void free(void* ptr) {
 
 struct deleter {
   template <typename T>
-  void operator()(T* ptr) const {
+  auto operator()(T* ptr) const noexcept -> void {
     xpu::free<T>(ptr);
   }
 };
@@ -78,7 +78,7 @@ private:
   std::unique_ptr<T[], deleter> data_;
 
 public:
-  unique_ptr()
+  unique_ptr() noexcept
     : data_{}
   { }
 
@@ -89,14 +89,14 @@ public:
   }
 
   [[nodiscard]]
-  const T* get() const noexcept { return data_.get(); }
+  auto get() const noexcept -> const T* { return data_.get(); }
 
   [[nodiscard]]
-  T* get() noexcept { return data_.get(); }
+  auto get() noexcept -> T* { return data_.get(); }
 };
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
-inline T* assume_aligned(T* ptr) noexcept {
+inline auto assume_aligned(T* ptr) noexcept -> T* {
   if constexpr (is_padded<T>) {
     return std::assume_aligned<default_align<T>>(ptr);
   } else {
@@ -104,11 +104,11 @@ inline T* assume_aligned(T* ptr) noexcept {
   }
 }
 
-inline void memset(
+inline auto memset(
   void* RESTRICT dst,
   int value,
   std::size_t bytes
-) {
+) noexcept -> void {
   if (bytes == 0uz) { return; }
 
 #if defined(XPU_CUDA)
@@ -118,11 +118,11 @@ inline void memset(
 #endif
 }
 
-inline void memcpy(
+inline auto memcpy(
   void* RESTRICT dst,
   const void* RESTRICT src,
   std::size_t bytes
-) {
+) noexcept -> void {
   if (bytes == 0uz) { return; }
 
 #if defined(XPU_CUDA)
@@ -133,11 +133,11 @@ inline void memcpy(
 }
 
 template <typename T>
-inline void copy_n(
+inline auto copy_n(
   T* RESTRICT dst,
   const T* RESTRICT src,
   std::size_t count
-) noexcept {
+) noexcept -> void {
   static_assert(
     std::is_trivially_copyable_v<T>,
     "ERROR: xpu::copy_n requires trivially copyable type"
@@ -147,10 +147,10 @@ inline void copy_n(
 }
 
 template <typename T>
-inline void zero_n(
+inline auto zero_n(
   T* RESTRICT dst,
   std::size_t count
-) noexcept {
+) noexcept -> void {
   static_assert(
     std::is_arithmetic_v<T>,
     "ERROR: xpu::zero_n requires arithmetic type"

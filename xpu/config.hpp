@@ -27,11 +27,11 @@ namespace xpu {
 #if defined(XPU_CUDA)
 
 template <typename Status>
-inline void cu_check(
+inline auto cu_check(
   Status result,
   Status success = Status{},
   std::source_location loc = std::source_location::current()
-) {
+) noexcept -> void {
   if (result == success) { return; }
 
   std::fprintf(

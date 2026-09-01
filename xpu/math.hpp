@@ -66,12 +66,12 @@ using xstd::ldexp; using xstd::frexp; using xstd::modf;
 
 // Overflow safe version of (num + den - 1) / den
 template <std::unsigned_integral T> [[nodiscard]] CUDA_CALLABLE
-inline constexpr T ceiling_div(T num, T den) noexcept {
+inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
   return num / den + (num % den != 0);
 }
 
 template <std::floating_point T> CUDA_CALLABLE
-inline void sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept  {
+inline auto sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept -> void {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
   else { ::sincos(arg, s, c); }
@@ -80,8 +80,8 @@ inline void sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept  {
 #endif
 }
 
-template <std::floating_point T> CUDA_CALLABLE
-inline T rsqrt(T x) noexcept {
+template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
+inline auto rsqrt(T x) noexcept -> T {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::rsqrtf(x); } else { return ::rsqrt(x); }
 #else
@@ -89,8 +89,8 @@ inline T rsqrt(T x) noexcept {
 #endif
 }
 
-template <std::floating_point T> CUDA_CALLABLE
-inline T norm3d(T x, T y, T z) noexcept {
+template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
+inline auto norm3d(T x, T y, T z) noexcept -> T {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::norm3df(x, y, z); }
   else { return ::norm3d(x, y, z); }
@@ -100,7 +100,7 @@ inline T norm3d(T x, T y, T z) noexcept {
 }
 
 template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
-inline T rnorm3d(T x, T y, T z) noexcept {
+inline auto rnorm3d(T x, T y, T z) noexcept -> T {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::rnorm3df(x, y, z); }
   else { return ::rnorm3d(x, y, z); }
@@ -110,7 +110,7 @@ inline T rnorm3d(T x, T y, T z) noexcept {
 }
 
 template <arithmetic T> CUDA_CALLABLE
-inline void atomic_add(T* ptr, T value) noexcept {
+inline auto atomic_add(T* ptr, T value) noexcept -> void {
 #if defined(__CUDA_ARCH__)
   atomicAdd(ptr, value);
 #else
