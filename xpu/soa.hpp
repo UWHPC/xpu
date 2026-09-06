@@ -82,6 +82,76 @@ public:
   }
 };
 
+template <typename T, std::size_t exposed_arrays>
+class soa_batch_view {
+  static_assert(exposed_arrays > 0, "ERROR: number of arrays must be greater than zero");
+
+private:
+  T* base_;
+  std::size_t batches_;
+  std::size_t count_;
+  std::size_t batch_stride_;
+
+public:
+  CUDA_CALLABLE
+  explicit constexpr soa_batch_view(
+    T* base,
+    std::size_t batches,
+    std::size_t count,
+    std::size_t batch_stride
+  ) noexcept
+    : base_{base}
+    , batches_{batches}
+    , count_{count}
+    , batch_stride_{batch_stride}
+  { }
+
+  [[nodiscard]] CUDA_CALLABLE
+  constexpr auto batch_count() const noexcept -> std::size_t {
+
+    return batches_;
+  }
+
+  [[nodiscard]] CUDA_CALLABLE
+  constexpr auto element_count() const noexcept -> std::size_t {
+
+    return count_;
+  }
+
+  [[nodiscard]] CUDA_CALLABLE
+  constexpr auto array_stride() const noexcept -> std::size_t {
+    const auto stride{xpu::handle_pad<T>(count_)};
+
+    return stride;
+  }
+
+  [[nodiscard]] CUDA_CALLABLE
+  constexpr auto batch_stride() const noexcept -> std::size_t {
+
+    return batch_stride_;
+  }
+
+  [[nodiscard]] CUDA_CALLABLE
+  auto view(std::size_t batch) noexcept -> xpu::soa_view<T, exposed_arrays> {
+    assert(batch < batches_);
+
+    auto* base{base_ + batch * batch_stride_};
+    const auto arrays{xpu::soa_view<T, exposed_arrays>{base, count_}};
+
+    return arrays;
+  }
+
+  [[nodiscard]] CUDA_CALLABLE
+  auto view(std::size_t batch) const noexcept -> xpu::soa_view<const T, exposed_arrays> {
+    assert(batch < batches_);
+
+    const auto* base{base_ + batch * batch_stride_};
+    const auto arrays{xpu::soa_view<const T, exposed_arrays>{base, count_}};
+
+    return arrays;
+  }
+};
+
 template <typename T, std::size_t num_arrays>
 class soa {
   static_assert(num_arrays > 0, "ERROR: number of arrays must be greater than zero");

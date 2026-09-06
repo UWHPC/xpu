@@ -7,6 +7,7 @@
 #include <xpu/soa.hpp>
 
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 inline int run_soa_cases() {
@@ -75,8 +76,54 @@ inline int run_soa_cases() {
     return test::fail("batched SoA storage size is incorrect");
   }
 
+  auto first_batch{batches.view(0uz)};
+  auto all_batches{xpu::soa_batch_view<int, arrays>{
+    first_batch[0], batch_count, batch_elements, batches.batch_stride()
+  }};
+  auto middle_batches{xpu::soa_batch_view<int, 2uz>{
+    first_batch[1], batch_count, batch_elements, batches.batch_stride()
+  }};
+  const auto readonly_batches{xpu::soa_batch_view<const int, arrays>{
+    first_batch[0], batch_count, batch_elements, batches.batch_stride()
+  }};
+
+  static_assert(std::is_same_v<decltype(all_batches.view(0uz)[0uz]), int*>);
+  static_assert(std::is_same_v<decltype(std::as_const(all_batches).view(0uz)[0uz]), const int*>);
+  static_assert(std::is_same_v<decltype(readonly_batches.view(0uz)[0uz]), const int*>);
+
+  const auto dimensions_match{
+    all_batches.batch_count() == batch_count &&
+    all_batches.element_count() == batch_elements &&
+    all_batches.array_stride() == batches.array_stride() &&
+    all_batches.batch_stride() == batches.batch_stride()
+  };
+
+  if (const auto failed{!dimensions_match}; failed) {
+    const auto failure{test::fail("batched SoA view dimensions are incorrect")};
+
+    return failure;
+  }
+
   for (auto batch{0uz}; batch < batch_count; ++batch) {
-    auto batch_view{batches.view(batch)};
+    auto batch_view{all_batches.view(batch)};
+    auto middle_view{middle_batches.view(batch)};
+    const auto const_middle_view{std::as_const(middle_batches).view(batch)};
+    const auto readonly_view{readonly_batches.view(batch)};
+    const auto owner_view{batches.view(batch)};
+    const auto addresses_match{
+      middle_view[0] == owner_view[1] &&
+      middle_view[1] == owner_view[2] &&
+      const_middle_view[0] == owner_view[1] &&
+      const_middle_view[1] == owner_view[2] &&
+      readonly_view[0] == owner_view[0] &&
+      readonly_view[arrays - 1uz] == owner_view[arrays - 1uz]
+    };
+
+    if (const auto failed{!addresses_match}; failed) {
+      const auto failure{test::fail("batched SoA view addresses are incorrect")};
+
+      return failure;
+    }
     for (auto array{0uz}; array < arrays; ++array) {
       const auto value{static_cast<int>(batch * arrays + array + 1uz)};
       xpu::fill_n(batch_view[array], batch_view.count(), value);
