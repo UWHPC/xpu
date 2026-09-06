@@ -23,6 +23,11 @@ void generate_random_samples(random_sample* samples) {
 }
 
 int main() {
+  if (const auto failure{run_batched_seed_cases()}; failure) {
+
+    return failure;
+  }
+
   xpu::buffer<random_sample> samples{random_sample_count};
   generate_random_samples<<<1u, 1u>>>(samples.data());
   xpu::cu_check(cudaGetLastError());

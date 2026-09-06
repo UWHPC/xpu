@@ -5,6 +5,11 @@
 #include <array>
 
 int main() {
+  if (const auto failure{run_batched_seed_cases()}; failure) {
+
+    return failure;
+  }
+
   xpu::random::generator generator;
   generator.seed(42uz, 3uz, 1uz);
 

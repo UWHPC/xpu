@@ -1,6 +1,7 @@
 #pragma once
 
 #include <xpu/config.hpp>
+#include <xpu/launch.hpp>
 
 #if defined(XPU_CUDA)
   #include <curand_kernel.h>
@@ -111,6 +112,44 @@ public:
 #endif
   }
 };
+
+namespace detail {
+
+struct seed_generators {
+  generator* generators;
+  const std::uint64_t* stream_ids;
+  std::uint64_t master_seed;
+  std::uint64_t offset;
+
+  DEVICE_ONLY
+  auto operator()(const xpu::array<std::size_t, 1uz>& index) const -> void {
+    const auto i{index[0]};
+
+    generators[i].seed(master_seed, stream_ids[i], offset);
+  }
+};
+
+} // namespace xpu::random::detail
+
+inline auto seed_n(
+  generator* generators,
+  const std::uint64_t* stream_ids,
+  std::size_t count,
+  std::uint64_t master_seed,
+  std::uint64_t offset = 0
+) -> void {
+  const xpu::range<1uz> range{
+    {0uz},
+    {count},
+    {1uz}
+  };
+
+  const detail::seed_generators seed{
+    generators, stream_ids, master_seed, offset
+  };
+
+  xpu::parallel_for(range, seed);
+}
 
 } // namespace xpu::random
 

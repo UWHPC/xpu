@@ -6,4 +6,5 @@
 #include <xpu/launch.hpp>
 #include <xpu/math.hpp>
 #include <xpu/memory.hpp>
+#include <xpu/numeric.hpp>
 #include <xpu/soa.hpp>
