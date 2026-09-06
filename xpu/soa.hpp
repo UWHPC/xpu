@@ -266,6 +266,36 @@ public:
   }
 
   template <std::size_t exposed_arrays = num_arrays, std::size_t first_array = 0uz> [[nodiscard]]
+  auto view() noexcept -> xpu::soa_batch_view<T, exposed_arrays> {
+    constexpr auto viewed_end{xpu::detail::checked_add(first_array, exposed_arrays)};
+    constexpr auto valid_arrays{viewed_end <= num_arrays};
+
+    static_assert(valid_arrays, "ERROR: number of viewed arrays is too large");
+
+    auto* base{storage_.data() + first_array * array_stride()};
+    const auto batches{xpu::soa_batch_view<T, exposed_arrays>{
+      base, batches_, count_, batch_stride()
+    }};
+
+    return batches;
+  }
+
+  template <std::size_t exposed_arrays = num_arrays, std::size_t first_array = 0uz> [[nodiscard]]
+  auto view() const noexcept -> xpu::soa_batch_view<const T, exposed_arrays> {
+    constexpr auto viewed_end{xpu::detail::checked_add(first_array, exposed_arrays)};
+    constexpr auto valid_arrays{viewed_end <= num_arrays};
+
+    static_assert(valid_arrays, "ERROR: number of viewed arrays is too large");
+
+    const auto* base{storage_.data() + first_array * array_stride()};
+    const auto batches{xpu::soa_batch_view<const T, exposed_arrays>{
+      base, batches_, count_, batch_stride()
+    }};
+
+    return batches;
+  }
+
+  template <std::size_t exposed_arrays = num_arrays, std::size_t first_array = 0uz> [[nodiscard]]
   auto view(std::size_t batch) noexcept -> xpu::soa_view<T, exposed_arrays> {
     static_assert(exposed_arrays <= num_arrays, "ERROR: exposed arrays is greater than number of arrays");
     static_assert(xpu::detail::checked_add(first_array, exposed_arrays) <= num_arrays, "ERROR: number of viewed arrays is too large");

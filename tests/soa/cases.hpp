@@ -76,16 +76,10 @@ inline int run_soa_cases() {
     return test::fail("batched SoA storage size is incorrect");
   }
 
-  auto first_batch{batches.view(0uz)};
-  auto all_batches{xpu::soa_batch_view<int, arrays>{
-    first_batch[0], batch_count, batch_elements, batches.batch_stride()
-  }};
-  auto middle_batches{xpu::soa_batch_view<int, 2uz>{
-    first_batch[1], batch_count, batch_elements, batches.batch_stride()
-  }};
-  const auto readonly_batches{xpu::soa_batch_view<const int, arrays>{
-    first_batch[0], batch_count, batch_elements, batches.batch_stride()
-  }};
+  auto all_batches{batches.view()};
+  auto middle_batches{batches.view<2uz, 1uz>()};
+  const auto readonly_batches{std::as_const(batches).view()};
+  const auto readonly_middle_batches{std::as_const(batches).view<2uz, 1uz>()};
 
   static_assert(std::is_same_v<decltype(all_batches.view(0uz)[0uz]), int*>);
   static_assert(std::is_same_v<decltype(std::as_const(all_batches).view(0uz)[0uz]), const int*>);
@@ -109,12 +103,15 @@ inline int run_soa_cases() {
     auto middle_view{middle_batches.view(batch)};
     const auto const_middle_view{std::as_const(middle_batches).view(batch)};
     const auto readonly_view{readonly_batches.view(batch)};
+    const auto readonly_middle_view{readonly_middle_batches.view(batch)};
     const auto owner_view{batches.view(batch)};
     const auto addresses_match{
       middle_view[0] == owner_view[1] &&
       middle_view[1] == owner_view[2] &&
       const_middle_view[0] == owner_view[1] &&
       const_middle_view[1] == owner_view[2] &&
+      readonly_middle_view[0] == owner_view[1] &&
+      readonly_middle_view[1] == owner_view[2] &&
       readonly_view[0] == owner_view[0] &&
       readonly_view[arrays - 1uz] == owner_view[arrays - 1uz]
     };
