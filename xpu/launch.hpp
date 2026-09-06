@@ -4,6 +4,7 @@
 #include <type_traits>
 #include <utility>
 #include <xpu/config.hpp>
+#include <xpu/detail/checked.hpp>
 #include <xpu/math.hpp>
 
 #if defined(XPU_CUDA)
@@ -26,7 +27,9 @@ inline auto device_SMs() -> unsigned int {
       xpu::cu_check(cudaDeviceGetAttribute(
         &sms, cudaDevAttrMultiProcessorCount, device
       ));
-      return static_cast<unsigned int>(sms);
+      const auto multiprocessors{xpu::detail::checked_cast<unsigned int>(sms)};
+
+      return multiprocessors;
     }()
   };
   return cached;
@@ -34,27 +37,53 @@ inline auto device_SMs() -> unsigned int {
 
 template <typename Kernel> [[nodiscard]]
 inline auto wave_blocks(Kernel kernel, dim3 threads, std::size_t smem = 0uz) -> unsigned int {
-  auto const thread_budget{threads.x * threads.y * threads.z};
+  const auto thread_budget{xpu::detail::checked_mul(
+    xpu::detail::checked_mul(threads.x, threads.y), threads.z
+  )};
   auto blocks_per_SM{0};
 
   cu_check(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-    &blocks_per_SM, kernel, static_cast<int>(thread_budget), smem
+    &blocks_per_SM, kernel, xpu::detail::checked_cast<int>(thread_budget), smem
   ));
 
-  return xpu::detail::device_SMs() * static_cast<unsigned int>(blocks_per_SM);
+  const auto blocks{xpu::detail::checked_mul(
+    xpu::detail::device_SMs(),
+    xpu::detail::checked_cast<unsigned int>(blocks_per_SM)
+  )};
+
+  return blocks;
 }
 
 [[nodiscard]]
 inline constexpr auto num_blocks(std::size_t size, unsigned int threads) noexcept -> unsigned int {
-  return static_cast<unsigned int>(xpu::ceiling_div<std::size_t>(size, threads));
+  const auto zero_threads{threads == 0u};
+
+  if (zero_threads) {
+    xpu::detail::checked_error("zero launch threads");
+  }
+
+  const auto blocks{xpu::detail::checked_cast<unsigned int>(
+    xpu::ceiling_div<std::size_t>(size, threads)
+  )};
+
+  return blocks;
 }
 
 template <typename Kernel> [[nodiscard]]
 inline auto blocks_for(Kernel kernel, unsigned int threads, std::size_t size) -> unsigned int {
-  return xpu::min(
-    xpu::detail::num_blocks(size, threads),
-    xpu::detail::wave_blocks(kernel, threads)
-  );
+  const auto zero_threads{threads == 0u};
+
+  if (zero_threads) {
+    xpu::detail::checked_error("zero launch threads");
+  }
+
+  const auto needed_blocks{xpu::ceiling_div<std::size_t>(size, threads)};
+  const auto available_blocks{xpu::detail::wave_blocks(kernel, threads)};
+  const auto blocks{xpu::detail::checked_cast<unsigned int>(
+    xpu::min(needed_blocks, static_cast<std::size_t>(available_blocks))
+  )};
+
+  return blocks;
 }
 
 } // namespace xpu::detail
@@ -92,7 +121,9 @@ inline auto global_index() noexcept -> Coord<Dims> {
 }
 
 inline constexpr auto block_per_dim(std::size_t size, unsigned int dim_threads) noexcept -> unsigned int {
-  return xpu::ceiling_div<unsigned int>(static_cast<int>(size), static_cast<int>(dim_threads));
+  const auto blocks{xpu::detail::num_blocks(size, dim_threads)};
+
+  return blocks;
 }
 
 template <int Dims> __device__ [[nodiscard]]
@@ -133,13 +164,19 @@ inline constexpr auto num_itrs(
   auto total{1uz};
 
   for (auto d{0uz}; d < dims; ++d) {
-    if (range.step[d] == 0uz || range.begin[d] >= range.end[d]) {
-      return 0uz;
-    }
+    const auto empty_dimension{range.step[d] == 0uz || range.begin[d] >= range.end[d]};
 
+    if (empty_dimension) {
+      const auto empty_count{0uz};
+
+      return empty_count;
+    }
+  }
+
+  for (auto d{0uz}; d < dims; ++d) {
     const auto delta{range.end[d] - range.begin[d]};
     const auto count{xpu::ceiling_div(delta, range.step[d])};
-    total *= count;
+    total = xpu::detail::checked_mul(total, count);
   }
 
   return total;
@@ -174,9 +211,17 @@ auto parallelForLaunchImpl(
   for (
     auto linear{xpu::linear_index()};
     linear < total;
-    linear += xpu::linear_stride()
   ) {
     fcn(xpu::detail::itr_index(range, linear));
+
+    const auto stride{xpu::linear_stride()};
+    const auto last_iteration{total - linear <= stride};
+
+    if (last_iteration) {
+      break;
+    }
+
+    linear += stride;
   }
 }
 #endif

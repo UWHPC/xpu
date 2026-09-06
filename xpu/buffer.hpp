@@ -14,7 +14,7 @@ private:
 public:
   explicit buffer(std::size_t count)
     : count_{count}
-    , data_{xpu::handle_pad<T>(count)}
+    , data_{xpu::checked_padding<T>(count)}
   { }
 
   [[nodiscard]]

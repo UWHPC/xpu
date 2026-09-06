@@ -1,4 +1,7 @@
 #include "../support/check.hpp"
+#include "../support/aborts.hpp"
+
+#include <limits>
 
 #include <xpu/buffer.hpp>
 #include <xpu/launch.hpp>
@@ -25,6 +28,26 @@ void write_launch_coordinates(
 } // namespace
 
 int main() {
+  static_assert(xpu::block_per_dim(0uz, 256u) == 0u);
+  static_assert(xpu::block_per_dim(257uz, 256u) == 2u);
+  static_assert(xpu::block_per_dim(1uz << 32u, 256u) == 16777216u);
+
+#if defined(__unix__)
+  if (const auto failure{test::check_abort([] {
+    static_cast<void>(xpu::block_per_dim(1uz, 0u));
+  })}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{test::check_abort([] {
+    static_cast<void>(xpu::block_per_dim(std::numeric_limits<std::size_t>::max(), 1u));
+  })}; failure) {
+
+    return failure;
+  }
+#endif
+
   constexpr auto threads{64u};
   const auto blocks{xpu::block_per_dim(test::count, threads)};
   const auto expected_stride{static_cast<std::size_t>(threads) * blocks};

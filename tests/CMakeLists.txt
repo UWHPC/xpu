@@ -45,6 +45,7 @@ endfunction()
 foreach(module IN ITEMS
   algorithm
   buffer
+  checked
   config
   launch
   linear_algebra

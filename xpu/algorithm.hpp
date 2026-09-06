@@ -1,6 +1,7 @@
 #pragma once
 
 #include <xpu/config.hpp>
+#include <xpu/detail/checked.hpp>
 #include <xpu/launch.hpp>
 
 #if defined(XPU_CUDA)
@@ -41,6 +42,8 @@ inline auto fill_n(
   std::size_t count,
   T value
 ) -> void {
+  static_cast<void>(xpu::detail::checked_mul(count, sizeof(T)));
+
 #if defined(XPU_CUDA)
   if (count == 0uz) { return; }
 

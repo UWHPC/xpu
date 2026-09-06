@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../support/check.hpp"
+#include "../support/aborts.hpp"
 
 #include <xpu/buffer.hpp>
 #include <xpu/linear_algebra.hpp>
@@ -156,7 +157,63 @@ int run_linear_algebra_type() {
   return 0;
 }
 
+inline auto run_linear_algebra_checked_cases() -> int {
+#if defined(__unix__)
+  if (const auto failure{test::check_abort([] {
+    xpu::linalg::lu_factorization<double> factorization{std::numeric_limits<std::size_t>::max(), 1uz};
+  })}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{test::check_abort([] {
+    xpu::linalg::lu_factorization<double> factorization{1uz, std::numeric_limits<std::size_t>::max()};
+  })}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{test::check_abort([] {
+    xpu::linalg::lu_factorization<double> factorization{2uz, 1uz};
+  })}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{test::check_abort([] {
+    xpu::linalg::transpose_square<double>(nullptr, std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max());
+  })}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{test::check_abort([] {
+    xpu::linalg::transpose_square<double>(nullptr, 1uz, std::numeric_limits<std::size_t>::max());
+  })}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{test::check_abort([] {
+    xpu::linalg::transpose_square<double>(nullptr, 2uz, 1uz);
+  })}; failure) {
+
+    return failure;
+  }
+
+#endif
+
+  const auto success{0};
+
+  return success;
+}
+
 inline int run_linear_algebra_cases() {
+  if (const auto failure{run_linear_algebra_checked_cases()}; failure) {
+
+    return failure;
+  }
+
   if (const auto status{run_linear_algebra_type<float>()}; status != 0) {
     return status;
   }

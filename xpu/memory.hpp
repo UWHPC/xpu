@@ -2,6 +2,7 @@
 
 #include <xpu/algorithm.hpp>
 #include <xpu/config.hpp>
+#include <xpu/detail/checked.hpp>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -17,17 +18,34 @@ inline constexpr bool is_padded{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
   static_assert(std::is_trivially_copyable_v<T>, "ERROR: xpu::bytes requires a trivially copyable type");
-  return count * sizeof(T);
+  const auto byte_count{xpu::detail::checked_bytes<T>(count)};
+
+  return byte_count;
 }
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr auto handle_pad(std::size_t unpadded) noexcept -> std::size_t {
   if constexpr (is_padded<T>) {
     constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
-    return xpu::ceiling_div(unpadded, lanes) * lanes;
+    const auto padded_count{xpu::detail::checked_round_up(unpadded, lanes)};
+
+    return padded_count;
   } else {
     return unpadded;
   }
+}
+
+template <typename T> [[nodiscard]]
+constexpr auto checked_padding(std::size_t count) noexcept -> std::size_t {
+  auto padded_count{count};
+
+  if constexpr (is_padded<T>) {
+    constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
+
+    padded_count = xpu::detail::checked_round_up(count, lanes);
+  }
+
+  return padded_count;
 }
 
 template <typename T> [[nodiscard]]
@@ -35,7 +53,7 @@ inline auto alloc(std::size_t count) -> T* {
   static_assert(std::is_trivially_copyable_v<T>);
   if (count == 0u) { return nullptr; }
 
-  const auto bytes{count * sizeof(T)};
+  const auto bytes{xpu::detail::checked_bytes<T>(count)};
 
 #if defined(XPU_CUDA)
   void* ptr{};
@@ -143,7 +161,9 @@ inline auto copy_n(
     "ERROR: xpu::copy_n requires trivially copyable type"
   );
 
-  xpu::memcpy(dst, src, xpu::bytes<T>(count));
+  const auto byte_count{xpu::detail::checked_bytes<T>(count)};
+
+  xpu::memcpy(dst, src, byte_count);
 }
 
 template <typename T>
@@ -156,7 +176,9 @@ inline auto zero_n(
     "ERROR: xpu::zero_n requires arithmetic type"
   );
 
-  xpu::memset(dst, 0, xpu::bytes<T>(count));
+  const auto byte_count{xpu::detail::checked_bytes<T>(count)};
+
+  xpu::memset(dst, 0, byte_count);
 }
 
 } // namespace xpu

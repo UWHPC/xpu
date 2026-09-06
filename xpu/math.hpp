@@ -1,6 +1,7 @@
 #pragma once
 
 #include <xpu/config.hpp>
+#include <xpu/detail/checked.hpp>
 
 #include <atomic>
 
@@ -67,7 +68,15 @@ using xstd::ldexp; using xstd::frexp; using xstd::modf;
 // Overflow safe version of (num + den - 1) / den
 template <std::unsigned_integral T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
-  return num / den + (num % den != 0);
+  const auto zero_denominator{den == 0};
+
+  if (zero_denominator) {
+    xpu::detail::checked_error("zero ceiling division denominator");
+  }
+
+  const auto quotient{num / den + (num % den != 0)};
+
+  return quotient;
 }
 
 template <std::floating_point T> CUDA_CALLABLE

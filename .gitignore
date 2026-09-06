@@ -1,4 +1,36 @@
-build*/
-.vscode/
-.cache/
+# Build output
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
 compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Tool caches
+.cache/
+.handoff/
+
+# Operating system files
+.DS_Store
+Thumbs.db

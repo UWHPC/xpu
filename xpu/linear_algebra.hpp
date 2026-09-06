@@ -2,6 +2,7 @@
 
 #include <xpu/buffer.hpp>
 #include <xpu/config.hpp>
+#include <xpu/detail/checked.hpp>
 #include <xpu/launch.hpp>
 #include <xpu/memory.hpp>
 
@@ -87,25 +88,30 @@ inline auto getrf_workspace_size(
   std::size_t order,
   std::size_t stride
 ) -> std::size_t {
+  const auto vendor_order{xpu::detail::checked_cast<int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<int>(stride)};
+
   auto size{0};
 
   if constexpr (std::same_as<T, float>) {
     xpu::cu_check(cusolverDnSgetrf_bufferSize(
       handle,
-      static_cast<int>(order), static_cast<int>(order),
-      nullptr, static_cast<int>(stride),
+      vendor_order, vendor_order,
+      nullptr, vendor_stride,
       &size
     ));
   } else {
     xpu::cu_check(cusolverDnDgetrf_bufferSize(
       handle,
-      static_cast<int>(order), static_cast<int>(order),
-      nullptr, static_cast<int>(stride),
+      vendor_order, vendor_order,
+      nullptr, vendor_stride,
       &size
     ));
   }
 
-  return static_cast<std::size_t>(size);
+  const auto workspace_size{xpu::detail::checked_cast<std::size_t>(size)};
+
+  return workspace_size;
 }
 
 template <supported_float T>
@@ -118,18 +124,21 @@ inline auto cusolver_getrf(
   int* pivot,
   int* info
 ) -> void {
+  const auto vendor_order{xpu::detail::checked_cast<int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<int>(stride)};
+
   if constexpr (std::same_as<T, float>) {
     xpu::cu_check(cusolverDnSgetrf(
       handle,
-      static_cast<int>(order), static_cast<int>(order),
-      matrix, static_cast<int>(stride),
+      vendor_order, vendor_order,
+      matrix, vendor_stride,
       workspace, pivot, info
     ));
   } else {
     xpu::cu_check(cusolverDnDgetrf(
       handle,
-      static_cast<int>(order), static_cast<int>(order),
-      matrix, static_cast<int>(stride),
+      vendor_order, vendor_order,
+      matrix, vendor_stride,
       workspace, pivot, info
     ));
   }
@@ -148,22 +157,27 @@ inline auto cusolver_getrs(
   std::size_t solution_stride,
   int* info
 ) -> void {
+  const auto vendor_order{xpu::detail::checked_cast<int>(order)};
+  const auto vendor_right_hand_sides{xpu::detail::checked_cast<int>(right_hand_sides)};
+  const auto vendor_lower_upper_stride{xpu::detail::checked_cast<int>(lower_upper_stride)};
+  const auto vendor_solution_stride{xpu::detail::checked_cast<int>(solution_stride)};
+
   if constexpr (std::same_as<T, float>) {
     xpu::cu_check(cusolverDnSgetrs(
       handle, operation,
-      static_cast<int>(order), static_cast<int>(right_hand_sides),
-      lower_upper, static_cast<int>(lower_upper_stride),
+      vendor_order, vendor_right_hand_sides,
+      lower_upper, vendor_lower_upper_stride,
       pivot,
-      solution, static_cast<int>(solution_stride),
+      solution, vendor_solution_stride,
       info
     ));
   } else {
     xpu::cu_check(cusolverDnDgetrs(
       handle, operation,
-      static_cast<int>(order), static_cast<int>(right_hand_sides),
-      lower_upper, static_cast<int>(lower_upper_stride),
+      vendor_order, vendor_right_hand_sides,
+      lower_upper, vendor_lower_upper_stride,
       pivot,
-      solution, static_cast<int>(solution_stride),
+      solution, vendor_solution_stride,
       info
     ));
   }
@@ -178,18 +192,21 @@ inline auto lapacke_getrf(
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
+  const auto vendor_order{xpu::detail::checked_cast<lapack_int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<lapack_int>(stride)};
+
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetrf(
       LAPACK_ROW_MAJOR,
-      static_cast<lapack_int>(order), static_cast<lapack_int>(order),
-      matrix, static_cast<lapack_int>(stride),
+      vendor_order, vendor_order,
+      matrix, vendor_stride,
       pivot
     );
   } else {
     return LAPACKE_dgetrf(
       LAPACK_ROW_MAJOR,
-      static_cast<lapack_int>(order), static_cast<lapack_int>(order),
-      matrix, static_cast<lapack_int>(stride),
+      vendor_order, vendor_order,
+      matrix, vendor_stride,
       pivot
     );
   }
@@ -202,18 +219,21 @@ inline auto lapacke_getri(
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
+  const auto vendor_order{xpu::detail::checked_cast<lapack_int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<lapack_int>(stride)};
+
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetri(
       LAPACK_ROW_MAJOR,
-      static_cast<lapack_int>(order),
-      inverse, static_cast<lapack_int>(stride),
+      vendor_order,
+      inverse, vendor_stride,
       pivot
     );
   } else {
     return LAPACKE_dgetri(
       LAPACK_ROW_MAJOR,
-      static_cast<lapack_int>(order),
-      inverse, static_cast<lapack_int>(stride),
+      vendor_order,
+      inverse, vendor_stride,
       pivot
     );
   }
@@ -227,19 +247,22 @@ inline auto lapacke_getrs(
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
+  const auto vendor_order{xpu::detail::checked_cast<lapack_int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<lapack_int>(stride)};
+
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetrs(
       LAPACK_ROW_MAJOR, 'N',
-      static_cast<lapack_int>(order), 1,
-      lower_upper, static_cast<lapack_int>(stride),
+      vendor_order, 1,
+      lower_upper, vendor_stride,
       pivot,
       solution, 1
     );
   } else {
     return LAPACKE_dgetrs(
       LAPACK_ROW_MAJOR, 'N',
-      static_cast<lapack_int>(order), 1,
-      lower_upper, static_cast<lapack_int>(stride),
+      vendor_order, 1,
+      lower_upper, vendor_stride,
       pivot,
       solution, 1
     );
@@ -256,7 +279,22 @@ inline auto transpose_square(
   std::size_t order,
   std::size_t stride
 ) noexcept -> void {
-  if (order == 0uz) { return; }
+  const auto empty_matrix{order == 0uz};
+
+  if (empty_matrix) {
+
+    return;
+  }
+
+  const auto invalid_stride{stride < order};
+
+  if (invalid_stride) {
+    detail::linalg_error("matrix stride is smaller than its order");
+  }
+
+  const auto matrix_size{xpu::detail::checked_mul(order, stride)};
+
+  static_cast<void>(xpu::detail::checked_bytes<T>(matrix_size));
 
 #if defined(XPU_CUDA)
   const dim3 threads{16u, 16u};
@@ -295,6 +333,12 @@ private:
   T* lower_upper_{};
 
 #if defined(XPU_CUDA)
+  using dimension_type = int;
+#else
+  using dimension_type = lapack_int;
+#endif
+
+#if defined(XPU_CUDA)
   xpu::buffer<int> pivot_;
   cusolverDnHandle_t handle_;
   xpu::buffer<T> workspace_;
@@ -303,9 +347,27 @@ private:
   xpu::buffer<lapack_int> pivot_;
 #endif
 
+  [[nodiscard]]
+  static auto checked_order(std::size_t order, std::size_t stride) noexcept -> std::size_t {
+    static_cast<void>(xpu::detail::checked_cast<dimension_type>(order));
+    static_cast<void>(xpu::detail::checked_cast<dimension_type>(stride));
+
+    const auto invalid_stride{stride < order};
+
+    if (invalid_stride) {
+      detail::linalg_error("matrix stride is smaller than its order");
+    }
+
+    const auto matrix_size{xpu::detail::checked_mul(order, stride)};
+
+    static_cast<void>(xpu::detail::checked_bytes<T>(matrix_size));
+
+    return order;
+  }
+
 public:
   lu_factorization(std::size_t order, std::size_t stride)
-    : order_{order}
+    : order_{checked_order(order, stride)}
     , stride_{stride}
 #if defined(XPU_CUDA)
     , pivot_{order}
@@ -423,7 +485,7 @@ public:
     }
 
 #if defined(XPU_CUDA)
-    const auto size{order_ * order_};
+    const auto size{xpu::detail::checked_mul(order_, order_)};
     const dim3 threads{256u};
     const dim3 blocks{xpu::block_per_dim(size, threads.x)};
 
