@@ -99,7 +99,59 @@ inline auto run_sum_type() -> int {
   return success;
 }
 
+struct sum_coordinates {
+  template <std::size_t dims> [[nodiscard]] DEVICE_ONLY
+  auto operator()(const xpu::array<std::size_t, dims>& index) const -> int {
+    int value{};
+
+    for (const auto coordinate : index) {
+      value += static_cast<int>(coordinate);
+    }
+
+    return value;
+  }
+};
+
+template <std::size_t dims>
+inline auto check_coordinate_sum(const xpu::range<dims>& range, int expected) -> int {
+  const sum_coordinates contribution{};
+  const auto scratch_bytes{xpu::parallel_reduce_sum_bytes<int>(range, contribution)};
+  xpu::buffer<std::byte> scratch{scratch_bytes};
+  xpu::buffer<int> output{1uz};
+
+  xpu::parallel_reduce_sum(
+    range, output.data(), contribution, scratch.data(), scratch_bytes
+  );
+
+  int actual{};
+  xpu::copy_n(&actual, output.data(), 1uz);
+  const auto incorrect_sum{actual != expected};
+
+  if (incorrect_sum) {
+    const auto failure{test::fail("reduction visited incorrect range coordinates")};
+
+    return failure;
+  }
+
+  const auto success{0};
+
+  return success;
+}
+
 inline auto run_sum_cases() -> int {
+  const xpu::range<1uz> line{{3uz}, {10uz}, {2uz}};
+  const xpu::range<3uz> volume{{1uz, 2uz, 3uz}, {4uz, 7uz, 8uz}, {2uz, 3uz, 2uz}};
+
+  if (const auto failure{check_coordinate_sum(line, 24)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(volume, 126)}; failure) {
+
+    return failure;
+  }
+
   if (const auto failure{run_sum_type<int>()}; failure) {
 
     return failure;

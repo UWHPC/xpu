@@ -193,13 +193,16 @@ inline constexpr auto itr_index(
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
   xpu::array<std::size_t, dims> index{};
 
-  for (auto d{dims}; d-- > 0uz;) {
+  for (auto d{dims}; d-- > 1uz;) {
     const auto delta{range.end[d] - range.begin[d]};
     const auto count{xpu::ceiling_div(delta, range.step[d])};
+    const auto coordinate{linear % count};
 
-    index[d] = range.begin[d] + (linear % count) * range.step[d];
+    index[d] = range.begin[d] + coordinate * range.step[d];
     linear /= count;
   }
+
+  index[0] = range.begin[0] + linear * range.step[0];
 
   return index;
 }
