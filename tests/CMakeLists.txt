@@ -36,10 +36,19 @@ function(xpu_add_backend_test module)
     find_package(Threads REQUIRED)
     target_link_libraries(${target} PRIVATE Threads::Threads)
   endif()
+  if(module STREQUAL "reduce" AND NOT XPU_CUDA)
+    find_package(OpenMP QUIET)
+    if(OpenMP_CXX_FOUND)
+      target_link_libraries(${target} PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+  endif()
   if(module STREQUAL "linear_algebra")
     target_link_libraries(${target} PRIVATE xpu::linalg)
   endif()
   add_test(NAME ${target} COMMAND ${target})
+  if(module STREQUAL "reduce" AND NOT XPU_CUDA)
+    set_tests_properties(${target} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
+  endif()
 endfunction()
 
 foreach(module IN ITEMS
@@ -52,6 +61,7 @@ foreach(module IN ITEMS
   math
   memory
   random
+  reduce
   soa
   integration
 )
