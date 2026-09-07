@@ -7,7 +7,7 @@
 #include <memory>
 
 inline int run_integration_cases() {
-  xpu::buffer<unsigned int> values{test::count};
+  auto values{xpu::buffer<unsigned int>{test::count}};
   xpu::fill_n(values.data(), values.count(), 9u);
 
   auto result{std::make_unique<unsigned int[]>(test::count)};

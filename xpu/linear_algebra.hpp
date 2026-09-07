@@ -41,43 +41,51 @@ inline auto linalg_error(const char* message) noexcept -> void {
 
 #if defined(XPU_CUDA)
 
-template <supported_float T> __global__
-auto cudaBuildIdentity(
-  std::size_t order,
-  std::size_t stride,
-  T* RESTRICT matrix
-) -> void {
-  const auto [i]{xpu::global_index<1>()};
-  const auto size{order * order};
-  if (i >= size) { return; }
+template <supported_float T>
+struct build_identity {
+  T* matrix;
+  std::size_t stride;
 
-  const auto row{i / order};
-  const auto column{i - row * order};
-  const auto is_diagonal{row == column};
-  const auto idx{row * stride + column};
+  DEVICE_ONLY
+  auto operator()(const xpu::array<std::size_t, 2uz>& index) const -> void {
+    const auto row{index[0]};
+    const auto column{index[1]};
 
-  matrix[idx] = is_diagonal ? T{1} : T{0};
-}
+    const auto is_diagonal{row == column};
+    const auto offset{row * stride + column};
+    const auto value{is_diagonal ? T{1} : T{0}};
 
-template <supported_float T> __global__
-auto cudaTransposeSquare(
-  std::size_t order,
-  std::size_t stride,
-  T* RESTRICT matrix
-) -> void {
-  const auto [column, row]{xpu::global_index<2>()};
-  if (row >= order || column >= order || row >= column) { return; }
+    matrix[offset] = value;
+  }
+};
 
-  const auto col_idx{row * stride + column};
-  const auto row_idx{column * stride + row};
-  const auto tmp{matrix[col_idx]};
+template <supported_float T>
+struct transpose_square {
+  T* matrix;
+  std::size_t stride;
 
-  matrix[col_idx] = matrix[row_idx];
-  matrix[row_idx] = tmp;
-}
+  DEVICE_ONLY
+  auto operator()(const xpu::array<std::size_t, 2uz>& index) const -> void {
+    const auto row{index[0]};
+    const auto column{index[1]};
+    const auto skip_pair{row >= column};
+
+    if (skip_pair) {
+
+      return;
+    }
+
+    const auto upper_offset{row * stride + column};
+    const auto lower_offset{column * stride + row};
+    const auto temporary{matrix[upper_offset]};
+
+    matrix[upper_offset] = matrix[lower_offset];
+    matrix[lower_offset] = temporary;
+  }
+};
 
 inline auto create_cusolver_handle() -> cusolverDnHandle_t {
-  cusolverDnHandle_t handle{};
+  auto handle{cusolverDnHandle_t{}};
   xpu::cu_check(cusolverDnCreate(&handle));
   return handle;
 }
@@ -297,19 +305,18 @@ inline auto transpose_square(
   static_cast<void>(xpu::detail::checked_bytes<T>(matrix_size));
 
 #if defined(XPU_CUDA)
-  const dim3 threads{16u, 16u};
-  const dim3 blocks{
-    xpu::block_per_dim(order, threads.x),
-    xpu::block_per_dim(order, threads.y)
+  const auto range = xpu::range<2uz>{
+    {0uz, 0uz},
+    {order, order},
+    {1uz, 1uz}
   };
 
-  detail::cudaTransposeSquare<<<
-    blocks, threads
-  >>>(
-    order, stride,
-    matrix
-  );
-  xpu::cu_check(cudaGetLastError());
+  const auto transpose = detail::transpose_square<T>{
+    matrix,
+    stride
+  };
+
+  xpu::parallel_for(range, transpose);
 #else
   for (auto row{0uz}; row < order; ++row) {
     for (auto column{row + 1uz}; column < order; ++column) {
@@ -485,17 +492,18 @@ public:
     }
 
 #if defined(XPU_CUDA)
-    const auto size{xpu::detail::checked_mul(order_, order_)};
-    const dim3 threads{256u};
-    const dim3 blocks{xpu::block_per_dim(size, threads.x)};
+    const auto range = xpu::range<2uz>{
+      {0uz, 0uz},
+      {order_, order_},
+      {1uz, 1uz}
+    };
 
-    detail::cudaBuildIdentity<<<
-      blocks, threads
-    >>>(
-      order_, stride_,
-      inverse
-    );
-    xpu::cu_check(cudaGetLastError());
+    const auto initialize = detail::build_identity<T>{
+      inverse,
+      stride_
+    };
+
+    xpu::parallel_for(range, initialize);
 
     detail::cusolver_getrs(
       handle_, CUBLAS_OP_N,

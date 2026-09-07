@@ -38,7 +38,7 @@ int main() {
     return status;
   }
 
-  xpu::buffer<int> atomic_result{1uz};
+  auto atomic_result{xpu::buffer<int>{1uz}};
   xpu::fill_n(atomic_result.data(), atomic_result.count(), atomic_add_initial);
   constexpr auto atomic_threads{64u};
   const auto atomic_blocks{
@@ -56,9 +56,9 @@ int main() {
     return status;
   }
 
-  xpu::buffer<float> a{test::count};
-  xpu::buffer<float> b{test::count};
-  xpu::buffer<float> result{test::count};
+  auto a{xpu::buffer<float>{test::count}};
+  auto b{xpu::buffer<float>{test::count}};
+  auto result{xpu::buffer<float>{test::count}};
   xpu::fill_n(a.data(), a.count(), 3.0f);
   xpu::fill_n(b.data(), b.count(), 4.0f);
 

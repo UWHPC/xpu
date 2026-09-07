@@ -9,7 +9,7 @@
 #include <memory>
 
 inline int run_buffer_cases() {
-  xpu::buffer<float> values{test::count};
+  auto values{xpu::buffer<float>{test::count}};
 
   if (values.count() != test::count) {
     return test::fail("buffer count is incorrect");
@@ -36,7 +36,7 @@ inline int run_buffer_cases() {
     }
   }
 
-  xpu::buffer<int> empty{0uz};
+  auto empty{xpu::buffer<int>{0uz}};
   if (empty.count() != 0uz || empty.capacity() != 0uz || empty.data() != nullptr) {
     return test::fail("empty buffer state is incorrect");
   }

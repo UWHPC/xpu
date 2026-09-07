@@ -52,8 +52,8 @@ int main() {
   const auto blocks{xpu::block_per_dim(test::count, threads)};
   const auto expected_stride{static_cast<std::size_t>(threads) * blocks};
 
-  xpu::buffer<std::size_t> indices{test::count};
-  xpu::buffer<std::size_t> strides{test::count};
+  auto indices{xpu::buffer<std::size_t>{test::count}};
+  auto strides{xpu::buffer<std::size_t>{test::count}};
   write_launch_coordinates<<<blocks, threads>>>(
     indices.data(), strides.data(), test::count
   );

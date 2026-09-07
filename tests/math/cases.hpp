@@ -4,7 +4,7 @@
 
 #include <xpu/math.hpp>
 
-inline constexpr int atomic_add_initial{7};
+inline constexpr auto atomic_add_initial{7};
 inline constexpr auto atomic_add_count{4096uz};
 
 inline int check_atomic_add_result(int result) {
@@ -29,8 +29,8 @@ inline int check_scalar_math_cases() {
     return test::fail("xpu::rnorm3d failed");
   }
 
-  double sine{};
-  double cosine{};
+  auto sine{0.0};
+  auto cosine{0.0};
   xpu::sincos(0.5, &sine, &cosine);
   if (
     !test::near(sine, xpu::sin(0.5), 1e-12) ||

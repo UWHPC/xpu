@@ -10,10 +10,10 @@
 namespace xpu {
 
 template <typename T>
-inline constexpr std::size_t default_align{(xpu::simd_bytes > alignof(T)) ? xpu::simd_bytes : alignof(T)};
+inline constexpr auto default_align{(xpu::simd_bytes > alignof(T)) ? xpu::simd_bytes : alignof(T)};
 
 template <typename T>
-inline constexpr bool is_padded{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
+inline constexpr auto is_padded{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
@@ -56,10 +56,10 @@ inline auto alloc(std::size_t count) -> T* {
   const auto bytes{xpu::detail::checked_bytes<T>(count)};
 
 #if defined(XPU_CUDA)
-  void* ptr{};
+  auto ptr{static_cast<void*>(nullptr)};
   if(cudaMalloc(&ptr, bytes) != cudaSuccess) { ptr = nullptr; }
 #else
-  void* ptr{::operator new(bytes, std::align_val_t{default_align<T>}, std::nothrow)};
+  auto ptr{::operator new(bytes, std::align_val_t{default_align<T>}, std::nothrow)};
 #endif
 
   if (!ptr) {
@@ -101,7 +101,7 @@ public:
   { }
 
   explicit unique_ptr(std::size_t count, T value = T{}) {
-    T* ptr{xpu::alloc<T>(count)};
+    auto ptr{xpu::alloc<T>(count)};
     xpu::fill_n(ptr, count, value);
     data_.reset(ptr);
   }

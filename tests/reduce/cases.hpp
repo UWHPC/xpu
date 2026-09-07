@@ -12,7 +12,7 @@ template <typename T>
 struct sum_values {
   [[nodiscard]] DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 2uz>&) -> T {
-    const T value{-1};
+    const auto value{T{-1}};
 
     return value;
   }
@@ -45,12 +45,12 @@ static_assert(!supports_sum<double, sum_values<float>>);
 
 template <typename T>
 inline auto run_sum_type() -> int {
-  constexpr std::array columns{0uz, 1uz, 3uz, 4097uz};
-  sum_values<T> contribution{};
-  xpu::buffer<T> output{1uz};
+  constexpr auto columns{std::array{0uz, 1uz, 3uz, 4097uz}};
+  auto contribution{sum_values<T>{}};
+  auto output{xpu::buffer<T>{1uz}};
 
   for (const auto count : columns) {
-    const xpu::range<2uz> range{
+    const auto range = xpu::range<2uz>{
       {2uz, 1uz}, {6uz, 1uz + 3uz * count}, {2uz, 3uz}
     };
     const auto required_bytes{xpu::parallel_reduce_sum_bytes<T>(range, contribution)};
@@ -63,7 +63,7 @@ inline auto run_sum_type() -> int {
       return failure;
     }
 
-    T expected{};
+    auto expected{T{}};
 
     for (auto row{2uz}; row < 6uz; row += 2uz) {
       for (auto column{1uz}; column < 1uz + 3uz * count; column += 3uz) {
@@ -72,8 +72,8 @@ inline auto run_sum_type() -> int {
     }
 
     const auto capacity{required_bytes + 64uz};
-    xpu::buffer<std::byte> scratch{capacity};
-    const T initial{91};
+    auto scratch{xpu::buffer<std::byte>{capacity}};
+    const auto initial{T{91}};
     xpu::copy_n(output.data(), &initial, 1uz);
 
     for (auto repeat{0uz}; repeat < 2uz; ++repeat) {
@@ -82,7 +82,7 @@ inline auto run_sum_type() -> int {
         empty ? nullptr : scratch.data(), empty ? 0uz : capacity
       );
 
-      T actual{};
+      auto actual{T{}};
       xpu::copy_n(&actual, output.data(), 1uz);
       const auto incorrect_sum{actual != expected};
 
@@ -102,7 +102,7 @@ inline auto run_sum_type() -> int {
 struct sum_coordinates {
   template <std::size_t dims> [[nodiscard]] DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, dims>& index) const -> int {
-    int value{};
+    auto value{0};
 
     for (const auto coordinate : index) {
       value += static_cast<int>(coordinate);
@@ -114,16 +114,16 @@ struct sum_coordinates {
 
 template <std::size_t dims>
 inline auto check_coordinate_sum(const xpu::range<dims>& range, int expected) -> int {
-  const sum_coordinates contribution{};
+  const auto contribution{sum_coordinates{}};
   const auto scratch_bytes{xpu::parallel_reduce_sum_bytes<int>(range, contribution)};
-  xpu::buffer<std::byte> scratch{scratch_bytes};
-  xpu::buffer<int> output{1uz};
+  auto scratch{xpu::buffer<std::byte>{scratch_bytes}};
+  auto output{xpu::buffer<int>{1uz}};
 
   xpu::parallel_reduce_sum(
     range, output.data(), contribution, scratch.data(), scratch_bytes
   );
 
-  int actual{};
+  auto actual{0};
   xpu::copy_n(&actual, output.data(), 1uz);
   const auto incorrect_sum{actual != expected};
 
@@ -139,8 +139,8 @@ inline auto check_coordinate_sum(const xpu::range<dims>& range, int expected) ->
 }
 
 inline auto run_sum_cases() -> int {
-  const xpu::range<1uz> line{{3uz}, {10uz}, {2uz}};
-  const xpu::range<3uz> volume{{1uz, 2uz, 3uz}, {4uz, 7uz, 8uz}, {2uz, 3uz, 2uz}};
+  const auto line = xpu::range<1uz>{{3uz}, {10uz}, {2uz}};
+  const auto volume = xpu::range<3uz>{{1uz, 2uz, 3uz}, {4uz, 7uz, 8uz}, {2uz, 3uz, 2uz}};
 
   if (const auto failure{check_coordinate_sum(line, 24)}; failure) {
 

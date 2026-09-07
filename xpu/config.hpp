@@ -88,8 +88,8 @@ concept arithmetic =
   !std::same_as<T, bool>   &&
   !std::same_as<T, char>;
 
-inline constexpr std::size_t simd_bytes{XPU_SIMD_BYTES};
-inline constexpr bool xpu_cuda{
+inline constexpr auto simd_bytes{std::size_t{XPU_SIMD_BYTES}};
+inline constexpr auto xpu_cuda{
 #if defined(XPU_CUDA)
   true
 #else

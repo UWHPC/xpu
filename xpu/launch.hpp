@@ -8,6 +8,7 @@
 #include <xpu/math.hpp>
 
 #if defined(XPU_CUDA)
+  #include <cub/device/device_for.cuh>
   #include <cub/device/device_reduce.cuh>
   #include <cuda/std/array>
   #include <thrust/iterator/counting_iterator.h>
@@ -24,7 +25,7 @@ namespace detail {
 
 [[nodiscard]]
 inline auto device_SMs() -> unsigned int {
-  static const unsigned int cached{[] {
+  static const auto cached{[] {
       auto device{0}, sms{0};
       xpu::cu_check(cudaGetDevice(&device));
       xpu::cu_check(cudaDeviceGetAttribute(
@@ -35,6 +36,7 @@ inline auto device_SMs() -> unsigned int {
       return multiprocessors;
     }()
   };
+
   return cached;
 }
 
@@ -108,7 +110,7 @@ template <> struct Coord<3> { std::size_t x{}, y{}, z{}; };
 
 template <int Dims> __device__ [[nodiscard]]
 inline auto global_index() noexcept -> Coord<Dims> {
-  Coord<Dims> id{};
+  auto id = Coord<Dims>{};
   
   if constexpr (Dims >= 1) {
     id.x = static_cast<std::size_t>(blockDim.x) * blockIdx.x + threadIdx.x;
@@ -131,7 +133,7 @@ inline constexpr auto block_per_dim(std::size_t size, unsigned int dim_threads) 
 
 template <int Dims> __device__ [[nodiscard]]
 inline auto global_stride() noexcept -> Coord<Dims> {
-  Coord<Dims> stride{};
+  auto stride = Coord<Dims>{};
   
   if constexpr (Dims >= 1) {
     stride.x = static_cast<std::size_t>(blockDim.x) * gridDim.x;
@@ -191,7 +193,7 @@ inline constexpr auto itr_index(
   std::size_t linear
 ) noexcept -> xpu::array<std::size_t, dims> {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
-  xpu::array<std::size_t, dims> index{};
+  auto index = xpu::array<std::size_t, dims>{};
 
   for (auto d{dims}; d-- > 1uz;) {
     const auto delta{range.end[d] - range.begin[d]};
@@ -223,7 +225,7 @@ struct reduction_contribution {
   [[nodiscard]] CUDA_CALLABLE
   auto operator()(std::size_t linear) const -> T {
     const auto index{xpu::detail::itr_index(range, linear)};
-    const T value{contribution(index)};
+    const auto value{T{contribution(index)}};
 
     return value;
   }
@@ -237,11 +239,11 @@ inline auto reduction_input(
 ) {
   using function_t = std::decay_t<F>;
 
-  const reduction_contribution<dims, T, function_t> transform{
+  const auto transform = reduction_contribution<dims, T, function_t>{
     range, function_t{std::forward<F>(contribution)}
   };
 
-  const thrust::counting_iterator<std::size_t> indices{0uz};
+  const auto indices{thrust::counting_iterator<std::size_t>{0uz}};
   const auto input{thrust::make_transform_iterator(indices, transform)};
 
   return input;
@@ -249,7 +251,7 @@ inline auto reduction_input(
 
 template <arithmetic T, typename Input> [[nodiscard]]
 inline auto reduction_bytes(Input input, std::ptrdiff_t count) -> std::size_t {
-  std::size_t required_bytes{};
+  auto required_bytes{0uz};
 
   xpu::cu_check(cub::DeviceReduce::Sum(
     nullptr, required_bytes, input, static_cast<T*>(nullptr), count
@@ -258,28 +260,18 @@ inline auto reduction_bytes(Input input, std::ptrdiff_t count) -> std::size_t {
   return required_bytes;
 }
 
-template <std::size_t dims, typename F> __global__
-auto cudaParallelForKernel(
-  xpu::range<dims> range,
-  std::size_t total,
-  F fcn
-) -> void {
-  for (
-    auto linear{xpu::linear_index()};
-    linear < total;
-  ) {
-    fcn(xpu::detail::itr_index(range, linear));
+template <std::size_t dims, typename F>
+struct parallel_for_function {
+  xpu::range<dims> range;
+  F fcn;
 
-    const auto stride{xpu::linear_stride()};
-    const auto last_iteration{total - linear <= stride};
+  DEVICE_ONLY
+  auto operator()(std::size_t linear) -> void {
+    const auto index{xpu::detail::itr_index(range, linear)};
 
-    if (last_iteration) {
-      break;
-    }
-
-    linear += stride;
+    fcn(index);
   }
-}
+};
 #endif
 
 template <std::size_t dims, typename F>
@@ -291,19 +283,12 @@ inline auto parallel_for_impl(
 #if defined(XPU_CUDA)
   using function_t = std::decay_t<F>;
 
-  constexpr auto gpuThreads{256u};
-  const auto gpuBlocks{xpu::detail::blocks_for(
-    xpu::detail::cudaParallelForKernel<dims, function_t>,
-    gpuThreads,
-    total
-  )};
+  const auto operation = parallel_for_function<dims, function_t>{
+    range,
+    function_t{std::forward<F>(fcn)}
+  };
 
-  xpu::detail::cudaParallelForKernel<dims, function_t><<<
-    gpuBlocks, gpuThreads
-  >>>(
-    range, total, function_t{std::forward<F>(fcn)}
-  );
-  xpu::cu_check(cudaGetLastError());
+  xpu::cu_check(cub::DeviceFor::Bulk(total, operation));
 #else
   #pragma omp parallel for
   for (auto linear = 0uz; linear < total; ++linear) {
@@ -323,12 +308,12 @@ inline auto parallel_reduce_sum_impl(
 ) -> void {
   using function_t = std::decay_t<F>;
 
-  const reduction_contribution<dims, T, function_t> transform{
+  const auto transform = reduction_contribution<dims, T, function_t>{
     range, function_t{std::forward<F>(contribution)}
   };
 
 #if defined(XPU_CUDA)
-  const thrust::counting_iterator<std::size_t> indices{0uz};
+  const auto indices{thrust::counting_iterator<std::size_t>{0uz}};
   const auto input{thrust::make_transform_iterator(indices, transform)};
 
   const auto count{xpu::detail::checked_cast<std::ptrdiff_t>(total)};
@@ -346,7 +331,7 @@ inline auto parallel_reduce_sum_impl(
     scratch, scratch_bytes, input, output_ptr, count
   ));
 #else
-  T total_sum{};
+  auto total_sum{T{}};
 
   #pragma omp parallel for reduction(+ : total_sum)
   for (auto linear = 0uz; linear < total; ++linear) {
@@ -381,7 +366,7 @@ inline auto parallel_reduce_sum_bytes(
 ) -> std::size_t {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
 
-  std::size_t required_bytes{};
+  auto required_bytes{0uz};
 
 #if defined(XPU_CUDA)
   const auto total{xpu::detail::num_itrs(range)};

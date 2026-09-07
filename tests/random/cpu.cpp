@@ -10,10 +10,10 @@ int main() {
     return failure;
   }
 
-  xpu::random::generator generator;
+  auto generator{xpu::random::generator{}};
   generator.seed(42uz, 3uz, 1uz);
 
-  std::array<random_sample, random_sample_count> samples{};
+  auto samples = std::array<random_sample, random_sample_count>{};
   for (auto& sample : samples) {
     sample = {
       generator.uniform<float>(),

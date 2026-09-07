@@ -9,7 +9,7 @@
 #include <memory>
 
 inline int run_algorithm_cases() {
-  xpu::buffer<int> values{test::count};
+  auto values{xpu::buffer<int>{test::count}};
   xpu::fill_n(values.data(), values.count(), 42);
 
   auto result{std::make_unique<int[]>(test::count)};

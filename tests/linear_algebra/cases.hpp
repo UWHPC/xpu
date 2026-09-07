@@ -17,17 +17,17 @@ int run_linear_algebra_type() {
   constexpr auto order{3uz};
   constexpr auto stride{5uz};
   constexpr auto size{order * stride};
-  constexpr T padding{T{19}};
-  constexpr T tolerance{T{100} * std::numeric_limits<T>::epsilon()};
+  constexpr auto padding{T{T{19}}};
+  constexpr auto tolerance{T{T{100} * std::numeric_limits<T>::epsilon()}};
 
-  constexpr std::array<T, order * order> original{
+  constexpr auto original = std::array<T, order * order>{
     T{0}, T{2}, T{1},
     T{1}, T{1}, T{0},
     T{2}, T{0}, T{1}
   };
 
-  std::array<T, size> matrix_host{};
-  std::array<T, size> inverse_host{};
+  auto matrix_host = std::array<T, size>{};
+  auto inverse_host = std::array<T, size>{};
   matrix_host.fill(padding);
   inverse_host.fill(padding);
 
@@ -37,12 +37,12 @@ int run_linear_algebra_type() {
     }
   }
 
-  xpu::buffer<T> matrix{size};
-  xpu::buffer<T> inverse{size};
+  auto matrix{xpu::buffer<T>{size}};
+  auto inverse{xpu::buffer<T>{size}};
   xpu::copy_n(matrix.data(), matrix_host.data(), size);
   xpu::copy_n(inverse.data(), inverse_host.data(), size);
 
-  xpu::linalg::lu_factorization<T> factorization{order, stride};
+  auto factorization{xpu::linalg::lu_factorization<T>{order, stride}};
   if (
     factorization.order() != order ||
     factorization.stride() != stride
@@ -72,11 +72,11 @@ int run_linear_algebra_type() {
     return test::fail("LU diagonal has the wrong determinant magnitude");
   }
 
-  constexpr std::array<T, order> rhs_host{T{7}, T{3}, T{5}};
-  constexpr std::array<T, order> expected_solution{T{1}, T{2}, T{3}};
-  std::array<T, order> solution_host{};
-  xpu::buffer<T> rhs{order};
-  xpu::buffer<T> solution{order};
+  constexpr auto rhs_host = std::array<T, order>{T{7}, T{3}, T{5}};
+  constexpr auto expected_solution = std::array<T, order>{T{1}, T{2}, T{3}};
+  auto solution_host = std::array<T, order>{};
+  auto rhs{xpu::buffer<T>{order}};
+  auto solution{xpu::buffer<T>{order}};
   xpu::copy_n(rhs.data(), rhs_host.data(), order);
 
   factorization.solve(matrix.data(), rhs.data(), solution.data());
@@ -135,7 +135,7 @@ int run_linear_algebra_type() {
   }
 
   matrix_host.fill(padding);
-  constexpr std::array<T, order * order> singular{
+  constexpr auto singular = std::array<T, order * order>{
     T{1}, T{0}, T{0},
     T{0}, T{1}, T{0},
     T{0}, T{0}, T{0}
@@ -160,21 +160,21 @@ int run_linear_algebra_type() {
 inline auto run_linear_algebra_checked_cases() -> int {
 #if defined(__unix__)
   if (const auto failure{test::check_abort([] {
-    xpu::linalg::lu_factorization<double> factorization{std::numeric_limits<std::size_t>::max(), 1uz};
+    auto factorization{xpu::linalg::lu_factorization<double>{std::numeric_limits<std::size_t>::max(), 1uz}};
   })}; failure) {
 
     return failure;
   }
 
   if (const auto failure{test::check_abort([] {
-    xpu::linalg::lu_factorization<double> factorization{1uz, std::numeric_limits<std::size_t>::max()};
+    auto factorization{xpu::linalg::lu_factorization<double>{1uz, std::numeric_limits<std::size_t>::max()}};
   })}; failure) {
 
     return failure;
   }
 
   if (const auto failure{test::check_abort([] {
-    xpu::linalg::lu_factorization<double> factorization{2uz, 1uz};
+    auto factorization{xpu::linalg::lu_factorization<double>{2uz, 1uz}};
   })}; failure) {
 
     return failure;

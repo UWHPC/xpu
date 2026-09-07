@@ -14,7 +14,7 @@ int check_atomic_add() {
 
   auto result{atomic_add_initial};
   {
-    std::array<std::jthread, thread_count> workers;
+    auto workers = std::array<std::jthread, thread_count>{};
     for (auto& worker : workers) {
       worker = std::jthread{[&result] {
         for (auto i{0uz}; i < atomic_add_count / thread_count; ++i) {
@@ -37,9 +37,9 @@ int main() {
     return status;
   }
 
-  xpu::buffer<float> a{test::count};
-  xpu::buffer<float> b{test::count};
-  xpu::buffer<float> result{test::count};
+  auto a{xpu::buffer<float>{test::count}};
+  auto b{xpu::buffer<float>{test::count}};
+  auto result{xpu::buffer<float>{test::count}};
   xpu::fill_n(a.data(), a.count(), 3.0f);
   xpu::fill_n(b.data(), b.count(), 4.0f);
 

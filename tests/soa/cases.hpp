@@ -12,7 +12,7 @@
 
 inline int run_soa_cases() {
   constexpr auto arrays{4uz};
-  xpu::soa<int, arrays> values{test::count};
+  auto values{xpu::soa<int, arrays>{test::count}};
 
   if (values.count() != test::count) {
     return test::fail("SoA count is incorrect");
@@ -57,7 +57,7 @@ inline int run_soa_cases() {
 
   constexpr auto batch_count{3uz};
   constexpr auto batch_elements{19uz};
-  xpu::soa_batch<int, arrays> batches{batch_count, batch_elements};
+  auto batches{xpu::soa_batch<int, arrays>{batch_count, batch_elements}};
 
   if (
     batches.batch_count() != batch_count ||

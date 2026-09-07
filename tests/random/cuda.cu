@@ -9,7 +9,7 @@
 
 __global__
 void generate_random_samples(random_sample* samples) {
-  xpu::random::generator generator;
+  auto generator{xpu::random::generator{}};
   generator.seed(42uz, 3uz, 1uz);
 
   for (auto i{0uz}; i < random_sample_count; ++i) {
@@ -28,11 +28,11 @@ int main() {
     return failure;
   }
 
-  xpu::buffer<random_sample> samples{random_sample_count};
+  auto samples{xpu::buffer<random_sample>{random_sample_count}};
   generate_random_samples<<<1u, 1u>>>(samples.data());
   xpu::cu_check(cudaGetLastError());
 
-  std::array<random_sample, random_sample_count> host_samples{};
+  auto host_samples = std::array<random_sample, random_sample_count>{};
   xpu::copy_n(
     host_samples.data(), samples.data(), random_sample_count
   );

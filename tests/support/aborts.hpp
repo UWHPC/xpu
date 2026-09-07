@@ -25,13 +25,13 @@ auto check_abort(Function function) -> int {
   const auto in_child{child == 0};
 
   if (in_child) {
-    const rlimit core_limit{0, 0};
+    const auto core_limit = rlimit{0, 0};
     setrlimit(RLIMIT_CORE, &core_limit);
     function();
     _exit(0);
   }
 
-  int status{};
+  auto status{0};
   const auto child_collected{waitpid(child, &status, 0) == child};
 
   if (const auto failed{!child_collected}; failed) {

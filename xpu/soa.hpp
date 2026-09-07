@@ -61,7 +61,7 @@ public:
 
   [[nodiscard]] CUDA_CALLABLE
   auto pointers() noexcept -> xpu::array<T*, exposed_arrays> {
-    xpu::array<T*, exposed_arrays> ptrs{};
+    auto ptrs = xpu::array<T*, exposed_arrays>{};
 
     for (auto i{0uz}; i < exposed_arrays; ++i) {
       ptrs[i] = xpu::assume_aligned<T>(base_ + i * stride());
@@ -72,7 +72,7 @@ public:
 
   [[nodiscard]] CUDA_CALLABLE
   auto pointers() const noexcept -> xpu::array<const T*, exposed_arrays> {
-    xpu::array<const T*, exposed_arrays> ptrs{};
+    auto ptrs = xpu::array<const T*, exposed_arrays>{};
 
     for (auto i{0uz}; i < exposed_arrays; ++i) {
       ptrs[i] = xpu::assume_aligned<T>(base_ + i * stride());

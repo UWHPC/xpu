@@ -49,7 +49,7 @@ struct compare_seeded_generators {
   DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 1uz>& index) const -> void {
     const auto i{index[0]};
-    xpu::random::generator reference;
+    auto reference{xpu::random::generator{}};
     reference.seed(master_seed, stream_ids[i], offset);
 
     auto matches{true};
@@ -67,22 +67,22 @@ struct compare_seeded_generators {
 
 inline auto run_batched_seed_cases() -> int {
   constexpr auto count{4uz};
-  constexpr std::uint64_t master_seed{0x123456789abcdef0ULL};
-  constexpr std::array<std::array<std::uint64_t, count>, 3uz> stream_ids{{
+  constexpr auto master_seed{std::uint64_t{0x123456789abcdef0ULL}};
+  constexpr auto stream_ids = std::array<std::array<std::uint64_t, count>, 3uz>{{
     {19u, 3u, 19u, 0x100000003ULL},
     {0x100000003ULL, 19u, 3u, 19u},
     {19u, 3u, 19u, 0x100000003ULL}
   }};
-  constexpr std::array<std::uint64_t, 3uz> offsets{0u, 5u, 0u};
+  constexpr auto offsets = std::array<std::uint64_t, 3uz>{0u, 5u, 0u};
 
   xpu::random::seed_n(nullptr, nullptr, 0uz, master_seed);
 
-  xpu::buffer<xpu::random::generator> generators{count};
-  xpu::buffer<std::uint64_t> streams{count};
-  xpu::buffer<int> results{count};
-  std::array<int, count> host_results{};
+  auto generators{xpu::buffer<xpu::random::generator>{count}};
+  auto streams{xpu::buffer<std::uint64_t>{count}};
+  auto results{xpu::buffer<int>{count}};
+  auto host_results = std::array<int, count>{};
 
-  const xpu::range<1uz> range{{0uz}, {count}, {1uz}};
+  const auto range = xpu::range<1uz>{{0uz}, {count}, {1uz}};
 
   for (auto round{0uz}; round < offsets.size(); ++round) {
     xpu::copy_n(streams.data(), stream_ids[round].data(), count);
@@ -91,7 +91,7 @@ inline auto run_batched_seed_cases() -> int {
     );
     xpu::random::seed_n(generators.data(), streams.data(), 0uz, master_seed + 1u);
 
-    const compare_seeded_generators compare{
+    const auto compare = compare_seeded_generators{
       generators.data(), streams.data(), results.data(), master_seed, offsets[round]
     };
 

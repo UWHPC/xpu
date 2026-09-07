@@ -5,6 +5,7 @@
 #include <xpu/launch.hpp>
 
 #if defined(XPU_CUDA)
+  #include <cub/device/device_transform.cuh>
   #include <cuda/std/algorithm>
   #include <cuda/std/cstddef>
 #else
@@ -16,48 +17,14 @@
 
 namespace xpu {
 
-namespace detail {
-
-#if defined(XPU_CUDA)
-
-template <typename T> __global__
-auto cudaBackendFillN(
-  T* RESTRICT ptr,
-  std::size_t count,
-  T value
-) -> void {
-  const auto [i]{xpu::global_index<1>()};
-  if (i >= count) { return; }
-
-  ptr[i] = value;
-}
-
-#endif
-
-} // namespace xpu::detail
-
 template <typename T>
 inline auto fill_n(
   T* RESTRICT ptr, 
   std::size_t count,
   T value
 ) -> void {
-  static_cast<void>(xpu::detail::checked_mul(count, sizeof(T)));
-
 #if defined(XPU_CUDA)
-  if (count == 0uz) { return; }
-
-  const dim3 threads{256u};
-  const dim3 blocks{
-    xpu::block_per_dim(count, threads.x)
-  };
-
-  detail::cudaBackendFillN<T><<<
-    blocks, threads
-  >>>(
-    ptr, count, value
-  );
-  xpu::cu_check(cudaGetLastError());
+  xpu::cu_check(cub::DeviceTransform::Fill(ptr, count, value));
 #else
   std::fill_n(ptr, count, value);
 #endif

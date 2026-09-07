@@ -49,12 +49,12 @@ public:
 #if defined(XPU_CUDA)
     curand_init(master_seed, stream_id, offset, &engine_);
 #else
-    std::seed_seq seed{
+    auto seed{std::seed_seq{
       static_cast<std::uint32_t>(master_seed),
       static_cast<std::uint32_t>(master_seed >> 32u),
       static_cast<std::uint32_t>(stream_id),
       static_cast<std::uint32_t>(stream_id >> 32u)
-    };
+    }};
     engine_.seed(seed);
     engine_.discard(offset);
 #endif
@@ -105,9 +105,9 @@ public:
 
     return static_cast<std::size_t>(value % bound);
 #else
-    std::uniform_int_distribution<std::size_t> distribution{
+    auto distribution{std::uniform_int_distribution<std::size_t>{
       0uz, upper_bound - 1uz
-    };
+    }};
     return distribution(engine_);
 #endif
   }
@@ -138,13 +138,13 @@ inline auto seed_n(
   std::uint64_t master_seed,
   std::uint64_t offset = 0
 ) -> void {
-  const xpu::range<1uz> range{
+  const auto range = xpu::range<1uz>{
     {0uz},
     {count},
     {1uz}
   };
 
-  const detail::seed_generators seed{
+  const auto seed = detail::seed_generators{
     generators, stream_ids, master_seed, offset
   };
 

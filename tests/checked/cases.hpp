@@ -56,7 +56,7 @@ inline auto run_checked_cases() -> int {
   static_assert(padded_byte_count - byte_count < xpu::simd_bytes);
   static_assert(xpu::checked_padding<unsigned char>(padded_byte_count) == padded_byte_count);
 
-  const xpu::range<3uz> empty_range{
+  const auto empty_range = xpu::range<3uz>{
     {0uz, 0uz, 0uz},
     {std::numeric_limits<std::size_t>::max(), 2uz, 0uz},
     {1uz, 1uz, 1uz}
@@ -73,13 +73,6 @@ inline auto run_checked_cases() -> int {
   }
 
   if (const auto failure{test::check_abort([] {
-    xpu::fill_n<std::uint64_t>(nullptr, std::numeric_limits<std::size_t>::max(), 0);
-  })}; failure) {
-
-    return failure;
-  }
-
-  if (const auto failure{test::check_abort([] {
     static_cast<void>(xpu::bytes<std::uint64_t>(std::numeric_limits<std::size_t>::max()));
   })}; failure) {
 
@@ -87,14 +80,14 @@ inline auto run_checked_cases() -> int {
   }
 
   if (const auto failure{test::check_abort([] {
-    xpu::soa_view<unsigned char, 2uz> view{nullptr, std::numeric_limits<std::size_t>::max()};
+    auto view{xpu::soa_view<unsigned char, 2uz>{nullptr, std::numeric_limits<std::size_t>::max()}};
   })}; failure) {
 
     return failure;
   }
 
   if (const auto failure{test::check_abort([] {
-    const xpu::range<2uz> range{
+    const auto range = xpu::range<2uz>{
       {0uz, 0uz},
       {std::numeric_limits<std::size_t>::max() / 2uz + 1uz, 2uz},
       {1uz, 1uz}
@@ -179,7 +172,7 @@ inline auto run_checked_cases() -> int {
   }
 
   if (const auto failure{test::check_abort([] {
-    xpu::buffer<std::uint64_t> values{std::numeric_limits<std::size_t>::max()};
+    auto values{xpu::buffer<std::uint64_t>{std::numeric_limits<std::size_t>::max()}};
   })}; failure) {
 
     return failure;
@@ -187,7 +180,7 @@ inline auto run_checked_cases() -> int {
 
   if (const auto failure{test::check_abort([] {
     const auto excessive_count{std::numeric_limits<std::size_t>::max() / 2uz + 1uz};
-    xpu::soa<unsigned char, 2uz> values{excessive_count};
+    auto values{xpu::soa<unsigned char, 2uz>{excessive_count}};
   })}; failure) {
 
     return failure;
@@ -195,7 +188,7 @@ inline auto run_checked_cases() -> int {
 
   if (const auto failure{test::check_abort([] {
     const auto excessive_count{std::numeric_limits<std::size_t>::max() / 2uz + 1uz};
-    xpu::soa_batch<unsigned char, 1uz> values{2uz, excessive_count};
+    auto values{xpu::soa_batch<unsigned char, 1uz>{2uz, excessive_count}};
   })}; failure) {
 
     return failure;
@@ -203,8 +196,8 @@ inline auto run_checked_cases() -> int {
 
   if (const auto failure{test::check_abort([] {
     const auto excessive_count{std::numeric_limits<std::size_t>::max() / sizeof(std::uint64_t) + 1uz};
-    std::uint64_t source{};
-    std::uint64_t destination{};
+    auto source{std::uint64_t{}};
+    auto destination{std::uint64_t{}};
 
     xpu::copy_n(&destination, &source, excessive_count);
   })}; failure) {
@@ -214,7 +207,7 @@ inline auto run_checked_cases() -> int {
 
   if (const auto failure{test::check_abort([] {
     const auto excessive_count{std::numeric_limits<std::size_t>::max() / sizeof(std::uint64_t) + 1uz};
-    std::uint64_t destination{};
+    auto destination{std::uint64_t{}};
 
     xpu::zero_n(&destination, excessive_count);
   })}; failure) {
