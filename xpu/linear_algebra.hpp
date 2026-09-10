@@ -24,7 +24,8 @@ namespace linalg {
 
 enum class status {
   success,
-  singular
+  singular,
+  not_pd
 };
 
 namespace detail {
@@ -123,6 +124,38 @@ inline auto getrf_workspace_size(
 }
 
 template <supported_float T>
+inline auto potrf_workspace_size(
+  cusolverDnHandle_t handle,
+  std::size_t order,
+  std::size_t stride
+) -> std::size_t {
+  const auto vendor_order{xpu::detail::checked_cast<int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<int>(stride)};
+
+  auto size{0};
+
+  if constexpr (std::same_as<T, float>) {
+    xpu::cu_check(cusolverDnSpotrf_bufferSize(
+      handle, CUBLAS_FILL_MODE_UPPER,
+      vendor_order,
+      nullptr, vendor_stride,
+      &size
+    ));
+  } else {
+    xpu::cu_check(cusolverDnDpotrf_bufferSize(
+      handle, CUBLAS_FILL_MODE_UPPER,
+      vendor_order,
+      nullptr, vendor_stride,
+      &size
+    ));
+  }
+
+  const auto workspace_size{xpu::detail::checked_cast<std::size_t>(size)};
+
+  return workspace_size;
+}
+
+template <supported_float T>
 inline auto cusolver_getrf(
   cusolverDnHandle_t handle,
   std::size_t order,
@@ -148,6 +181,39 @@ inline auto cusolver_getrf(
       vendor_order, vendor_order,
       matrix, vendor_stride,
       workspace, pivot, info
+    ));
+  }
+}
+
+template <supported_float T>
+inline auto cusolver_potrf(
+  cusolverDnHandle_t handle,
+  std::size_t order,
+  std::size_t stride,
+  T* matrix,
+  T* workspace,
+  std::size_t workspace_size,
+  int* info
+) -> void {
+  const auto vendor_order{xpu::detail::checked_cast<int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<int>(stride)};
+  const auto vendor_workspace_size{xpu::detail::checked_cast<int>(workspace_size)};
+
+  if constexpr (std::same_as<T, float>) {
+    xpu::cu_check(cusolverDnSpotrf(
+      handle, CUBLAS_FILL_MODE_UPPER,
+      vendor_order,
+      matrix, vendor_stride,
+      workspace, vendor_workspace_size,
+      info
+    ));
+  } else {
+    xpu::cu_check(cusolverDnDpotrf(
+      handle, CUBLAS_FILL_MODE_UPPER,
+      vendor_order,
+      matrix, vendor_stride,
+      workspace, vendor_workspace_size,
+      info
     ));
   }
 }
@@ -191,6 +257,41 @@ inline auto cusolver_getrs(
   }
 }
 
+template <supported_float T>
+inline auto cusolver_potrs(
+  cusolverDnHandle_t handle,
+  std::size_t order,
+  std::size_t right_hand_sides,
+  const T* factor,
+  std::size_t factor_stride,
+  T* solution,
+  std::size_t solution_stride,
+  int* info
+) -> void {
+  const auto vendor_order{xpu::detail::checked_cast<int>(order)};
+  const auto vendor_right_hand_sides{xpu::detail::checked_cast<int>(right_hand_sides)};
+  const auto vendor_factor_stride{xpu::detail::checked_cast<int>(factor_stride)};
+  const auto vendor_solution_stride{xpu::detail::checked_cast<int>(solution_stride)};
+
+  if constexpr (std::same_as<T, float>) {
+    xpu::cu_check(cusolverDnSpotrs(
+      handle, CUBLAS_FILL_MODE_UPPER,
+      vendor_order, vendor_right_hand_sides,
+      factor, vendor_factor_stride,
+      solution, vendor_solution_stride,
+      info
+    ));
+  } else {
+    xpu::cu_check(cusolverDnDpotrs(
+      handle, CUBLAS_FILL_MODE_UPPER,
+      vendor_order, vendor_right_hand_sides,
+      factor, vendor_factor_stride,
+      solution, vendor_solution_stride,
+      info
+    ));
+  }
+}
+
 #else
 
 template <supported_float T>
@@ -216,6 +317,30 @@ inline auto lapacke_getrf(
       vendor_order, vendor_order,
       matrix, vendor_stride,
       pivot
+    );
+  }
+}
+
+template <supported_float T>
+inline auto lapacke_potrf(
+  T* RESTRICT matrix,
+  std::size_t order,
+  std::size_t stride
+) -> lapack_int {
+  const auto vendor_order{xpu::detail::checked_cast<lapack_int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<lapack_int>(stride)};
+
+  if constexpr (std::same_as<T, float>) {
+    return LAPACKE_spotrf(
+      LAPACK_ROW_MAJOR, 'L',
+      vendor_order,
+      matrix, vendor_stride
+    ); // use lower triangular
+  } else {
+    return LAPACKE_dpotrf(
+      LAPACK_ROW_MAJOR, 'L',
+      vendor_order,
+      matrix, vendor_stride
     );
   }
 }
@@ -277,6 +402,33 @@ inline auto lapacke_getrs(
   }
 }
 
+template <supported_float T>
+inline auto lapacke_potrs(
+  const T* RESTRICT lower_upper,
+  T* RESTRICT solution,
+  std::size_t order,
+  std::size_t stride
+) -> lapack_int {
+  const auto vendor_order{xpu::detail::checked_cast<lapack_int>(order)};
+  const auto vendor_stride{xpu::detail::checked_cast<lapack_int>(stride)};
+
+  if constexpr (std::same_as<T, float>) {
+    return LAPACKE_spotrs(
+      LAPACK_ROW_MAJOR, 'L',
+      vendor_order, 1,
+      lower_upper, vendor_stride,
+      solution, 1
+    );
+  } else {
+    return LAPACKE_dpotrs(
+      LAPACK_ROW_MAJOR, 'L',
+      vendor_order, 1,
+      lower_upper, vendor_stride,
+      solution, 1
+    );
+  }
+}
+
 #endif
 
 } // namespace xpu::linalg::detail
@@ -331,6 +483,148 @@ inline auto transpose_square(
   }
 #endif
 }
+
+template <supported_float T>
+class cholesky_factorization {
+private:
+  std::size_t order_;
+  std::size_t stride_;
+  T* factor_{};
+
+#if defined(XPU_CUDA)
+  using dimension_type = int;
+#else
+  using dimension_type = lapack_int;
+#endif
+
+#if defined(XPU_CUDA)
+  cusolverDnHandle_t handle_;
+  xpu::buffer<T> workspace_;
+  xpu::buffer<int> info_;
+#endif
+
+  [[nodiscard]]
+  static auto checked_order(std::size_t order, std::size_t stride) noexcept -> std::size_t {
+    static_cast<void>(xpu::detail::checked_cast<dimension_type>(order));
+    static_cast<void>(xpu::detail::checked_cast<dimension_type>(stride));
+
+    const auto invalid_stride{stride < order};
+
+    if (invalid_stride) {
+      detail::linalg_error("matrix stride is smaller than its order");
+    }
+
+    const auto matrix_size{xpu::detail::checked_mul(order, stride)};
+
+    static_cast<void>(xpu::detail::checked_bytes<T>(matrix_size));
+
+    return order;
+  }
+
+public:
+  cholesky_factorization(std::size_t order, std::size_t stride)
+    : order_{checked_order(order, stride)}
+    , stride_{stride}
+#if defined(XPU_CUDA)
+    , handle_{detail::create_cusolver_handle()}
+    , workspace_{detail::potrf_workspace_size<T>(handle_, order, stride)}
+    , info_{1uz}
+#endif
+  { }
+
+  ~cholesky_factorization() {
+#if defined(XPU_CUDA)
+    xpu::cu_check(cusolverDnDestroy(handle_));
+#endif
+  }
+
+  [[nodiscard]]
+  constexpr auto order() const noexcept -> std::size_t {
+    return order_;
+  }
+
+  [[nodiscard]]
+  constexpr auto stride() const noexcept -> std::size_t {
+    return stride_;
+  }
+
+  [[nodiscard]]
+  auto factorize(T* RESTRICT matrix) noexcept -> status {
+    factor_ = nullptr;
+
+#if defined(XPU_CUDA)
+    detail::cusolver_potrf(
+      handle_, order_, stride_,
+      matrix, workspace_.data(), workspace_.size(), info_.data()
+    );
+
+    auto info{0};
+    xpu::copy_n(&info, info_.data(), 1uz);
+    if (info < 0) {
+      detail::linalg_error("cuSOLVER potrf received an invalid argument");
+    }
+    if (info > 0) { return status::not_pd; }
+#else
+    const auto info{
+      detail::lapacke_potrf(matrix, order_, stride_)
+    };
+    if (info < 0) {
+      detail::linalg_error("LAPACKE potrf failed");
+    }
+    if (info > 0) { return status::not_pd; }
+#endif
+
+    factor_ = matrix;
+    return status::success;
+  }
+
+  auto solve(
+    const T* RESTRICT factor,
+    const T* RESTRICT rhs,
+    T* RESTRICT solution
+  ) noexcept -> void {
+    if (!factor_) {
+      detail::linalg_error("you must factor before you solve");
+    }
+    if (factor != factor_) {
+      detail::linalg_error(
+        "solve requires the most recently factorized matrix"
+      );
+    }
+    if (rhs == solution) {
+      detail::linalg_error("rhs and solution must not alias");
+    }
+
+    xpu::copy_n(solution, rhs, order_);
+
+#if defined(XPU_CUDA)
+    detail::cusolver_potrs(
+      handle_, order_, 1uz,
+      factor, stride_,
+      solution, order_,
+      info_.data()
+    );
+
+    auto info{0};
+    xpu::copy_n(&info, info_.data(), 1uz);
+    if (info != 0) {
+      detail::linalg_error("cuSOLVER potrs received an invalid argument");
+    }
+#else
+    const auto info{
+      detail::lapacke_potrs(factor, solution, order_, stride_)
+    };
+    if (info != 0) {
+      detail::linalg_error("LAPACKE potrs failed");
+    }
+#endif
+  }
+
+  auto operator=(const cholesky_factorization&) -> cholesky_factorization& = delete;
+  cholesky_factorization(const cholesky_factorization&) = delete;
+  auto operator=(cholesky_factorization&&) -> cholesky_factorization& = delete;
+  cholesky_factorization(cholesky_factorization&&) = delete;
+};
 
 template <supported_float T>
 class lu_factorization {
