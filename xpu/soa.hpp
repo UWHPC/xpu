@@ -159,7 +159,7 @@ public:
     , buffer_{
         xpu::detail::checked_mul(
           num_arrays,
-          xpu::checked_padding<T>(count)
+          xpu::handle_pad<T>(count)
         )
       }
   { }
@@ -222,7 +222,7 @@ public:
           batches,
           xpu::detail::checked_mul(
             num_arrays,
-            xpu::checked_padding<T>(count)
+            xpu::handle_pad<T>(count)
           )
         )
       }

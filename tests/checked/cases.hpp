@@ -42,19 +42,18 @@ inline auto run_checked_cases() -> int {
   static_assert(xpu::detail::checked_cast<unsigned int>(std::uint8_t{255}) == 255u);
 
   static_assert(xpu::bytes<std::uint32_t>(3uz) == 12uz);
-  static_assert(xpu::handle_pad<unsigned char>(xpu::simd_bytes) == xpu::simd_bytes);
+  static_assert(xpu::handle_pad<unsigned char>(xpu::alignment_bytes) == xpu::alignment_bytes);
 
   static_assert(xpu::detail::checked_bytes<std::uint32_t>(0uz) == 0uz);
   static_assert(xpu::detail::checked_bytes<std::uint32_t>(3uz) == 12uz);
 
-  constexpr auto byte_count{xpu::simd_bytes + 1uz};
-  constexpr auto padded_byte_count{xpu::checked_padding<unsigned char>(byte_count)};
+  constexpr auto byte_count{xpu::alignment_bytes + 1uz};
+  constexpr auto padded_byte_count{xpu::handle_pad<unsigned char>(byte_count)};
 
-  static_assert(xpu::checked_padding<unsigned char>(0uz) == 0uz);
-  static_assert(xpu::checked_padding<unsigned char>(xpu::simd_bytes) == xpu::simd_bytes);
+  static_assert(xpu::handle_pad<unsigned char>(0uz) == 0uz);
   static_assert(padded_byte_count >= byte_count);
-  static_assert(padded_byte_count - byte_count < xpu::simd_bytes);
-  static_assert(xpu::checked_padding<unsigned char>(padded_byte_count) == padded_byte_count);
+  static_assert(padded_byte_count - byte_count < xpu::alignment_bytes);
+  static_assert(xpu::handle_pad<unsigned char>(padded_byte_count) == padded_byte_count);
 
   const auto empty_range = xpu::range<3uz>{
     {0uz, 0uz, 0uz},

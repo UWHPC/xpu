@@ -1,6 +1,5 @@
 #pragma once
 
-#include <type_traits>
 #if defined(XPU_CUDA) && !defined(__CUDACC__)
   #error "ERROR: must use nvcc when compiling with the XPU_CUDA flag."
 #endif
@@ -15,6 +14,7 @@
 #include <cstdlib>
 #include <concepts>
 #include <source_location>
+#include <type_traits>
 
 #if defined(XPU_CUDA)
   namespace xstd = cuda::std;
@@ -68,11 +68,11 @@ inline auto cu_check(
 
 #ifndef XPU_SIMD_BYTES
   #if defined(__AVX512F__)
-    #define XPU_SIMD_BYTES 64
+    #define XPU_SIMD_BYTES 64uz
   #elif defined(__AVX2__) || defined(__AVX__)
-    #define XPU_SIMD_BYTES 32
+    #define XPU_SIMD_BYTES 32uz
   #else
-    #define XPU_SIMD_BYTES 16
+    #define XPU_SIMD_BYTES 16uz
   #endif
 #endif
 
@@ -89,12 +89,18 @@ concept arithmetic =
   !std::same_as<T, char>;
 
 inline constexpr auto simd_bytes{std::size_t{XPU_SIMD_BYTES}};
+inline constexpr auto cuda_align_bytes{128uz};
+
 inline constexpr auto xpu_cuda{
 #if defined(XPU_CUDA)
   true
 #else
   false
 #endif
+};
+
+inline constexpr auto alignment_bytes{
+  xpu_cuda ? cuda_align_bytes : simd_bytes
 };
 
 } // namespace xpu

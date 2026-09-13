@@ -10,10 +10,10 @@
 namespace xpu {
 
 template <typename T>
-inline constexpr auto default_align{(xpu::simd_bytes > alignof(T)) ? xpu::simd_bytes : alignof(T)};
+inline constexpr auto default_align{(xpu::alignment_bytes > alignof(T)) ? xpu::alignment_bytes : alignof(T)};
 
 template <typename T>
-inline constexpr auto is_padded{!xpu::xpu_cuda && sizeof(T) < xpu::simd_bytes};
+inline constexpr auto is_padded{sizeof(T) < xpu::alignment_bytes};
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
@@ -26,26 +26,13 @@ inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr auto handle_pad(std::size_t unpadded) noexcept -> std::size_t {
   if constexpr (is_padded<T>) {
-    constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
+    constexpr auto lanes{xpu::alignment_bytes / sizeof(T)};
     const auto padded_count{xpu::detail::checked_round_up(unpadded, lanes)};
 
     return padded_count;
   } else {
     return unpadded;
   }
-}
-
-template <typename T> [[nodiscard]]
-constexpr auto checked_padding(std::size_t count) noexcept -> std::size_t {
-  auto padded_count{count};
-
-  if constexpr (is_padded<T>) {
-    constexpr auto lanes{xpu::simd_bytes / sizeof(T)};
-
-    padded_count = xpu::detail::checked_round_up(count, lanes);
-  }
-
-  return padded_count;
 }
 
 template <typename T> [[nodiscard]]
