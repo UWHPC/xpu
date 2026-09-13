@@ -1,22 +1,15 @@
 #pragma once
 
+#include <xpu/array.hpp>
 #include <xpu/buffer.hpp>
 #include <xpu/config.hpp>
 #include <xpu/detail/checked.hpp>
 #include <xpu/memory.hpp>
 
-#if defined(XPU_CUDA)
-  #include <cuda/std/array>
-#else
-  #include <array>
-#endif
-
 #include <cstddef>
 #include <cassert>
 
 namespace xpu {
-
-using xstd::array;
 
 template <typename T, std::size_t exposed_arrays>
 class soa_view {
