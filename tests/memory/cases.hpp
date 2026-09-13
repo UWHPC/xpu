@@ -9,7 +9,7 @@
 inline int run_memory_cases() {
   static_assert(xpu::bytes<int>(3uz) == 3uz * sizeof(int));
 
-  auto values{xpu::unique_ptr<int>{test::count, 7}};
+  auto values{xpu::make_unique<int>(test::count, 7)};
   auto host{std::make_unique<int[]>(test::count)};
   xpu::copy_n(host.get(), values.get(), test::count);
 

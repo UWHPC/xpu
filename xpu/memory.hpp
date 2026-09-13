@@ -51,7 +51,7 @@ constexpr auto checked_padding(std::size_t count) noexcept -> std::size_t {
 template <typename T> [[nodiscard]]
 inline auto alloc(std::size_t count) -> T* {
   static_assert(std::is_trivially_copyable_v<T>);
-  if (count == 0u) { return nullptr; }
+  if (count == 0uz) { return nullptr; }
 
   const auto bytes{xpu::detail::checked_bytes<T>(count)};
 
@@ -75,7 +75,9 @@ inline auto alloc(std::size_t count) -> T* {
 }
 
 template <typename T>
-inline auto free(void* ptr) noexcept -> void {
+inline auto free(T* ptr) noexcept -> void {
+  if (!ptr) { return; }
+
 #if defined(XPU_CUDA)
   cudaFree(ptr);
 #else
@@ -83,35 +85,24 @@ inline auto free(void* ptr) noexcept -> void {
 #endif
 }
 
+template <typename T>
 struct deleter {
-  template <typename T>
   auto operator()(T* ptr) const noexcept -> void {
-    xpu::free<T>(ptr);
+    xpu::free(ptr);
   }
 };
 
 template <typename T>
-class unique_ptr {
-private:
-  std::unique_ptr<T[], deleter> data_;
+using unique_ptr = std::unique_ptr<T[], xpu::deleter<T>>;
 
-public:
-  unique_ptr() noexcept
-    : data_{}
-  { }
+template <typename T>
+constexpr auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
+  auto* RESTRICT ptr{xpu::alloc<T>(count)};
 
-  explicit unique_ptr(std::size_t count, T value = T{}) {
-    auto ptr{xpu::alloc<T>(count)};
-    xpu::fill_n(ptr, count, value);
-    data_.reset(ptr);
-  }
+  xpu::fill_n(ptr, count, value);
 
-  [[nodiscard]]
-  auto get() const noexcept -> const T* { return data_.get(); }
-
-  [[nodiscard]]
-  auto get() noexcept -> T* { return data_.get(); }
-};
+  return xpu::unique_ptr<T>{ptr};
+}
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
 inline auto assume_aligned(T* ptr) noexcept -> T* {
