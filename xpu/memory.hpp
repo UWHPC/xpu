@@ -83,7 +83,7 @@ template <typename T>
 using unique_ptr = std::unique_ptr<T[], xpu::deleter<T>>;
 
 template <typename T>
-constexpr auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
+auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
   auto* RESTRICT ptr{xpu::alloc<T>(count)};
 
   xpu::fill_n(ptr, count, value);
@@ -92,7 +92,7 @@ constexpr auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
 }
 
 template <typename T> [[nodiscard]] CUDA_CALLABLE
-inline auto assume_aligned(T* ptr) noexcept -> T* {
+constexpr auto assume_aligned(T* ptr) noexcept -> T* {
   if constexpr (is_padded<T>) {
     return std::assume_aligned<default_align<T>>(ptr);
   } else {
