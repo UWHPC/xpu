@@ -22,10 +22,14 @@
   namespace xstd = std;
 #endif
 
+/** @brief Utilities shared by the CPU and CUDA backends. */
 namespace xpu {
 
 #if defined(XPU_CUDA)
 
+/** @brief Check a CUDA status against @p success and abort on failure,
+ *  reporting the status and @p loc.
+ */
 template <typename Status>
 inline auto cu_check(
   Status result,
@@ -48,18 +52,21 @@ inline auto cu_check(
 
 #endif
 
+/** @brief Compiler spelling for a nonaliasing pointer. */
 #if defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
   #define RESTRICT __restrict
 #else
   #define RESTRICT
 #endif
 
+/** @brief Mark a function callable on both host and device. */
 #if defined(XPU_CUDA)
   #define CUDA_CALLABLE __host__ __device__
 #else
   #define CUDA_CALLABLE
 #endif
 
+/** @brief Mark a function callable on the CUDA device. */
 #if defined(XPU_CUDA)
   #define DEVICE_ONLY __device__
 #else
@@ -76,11 +83,13 @@ inline auto cu_check(
   #endif
 #endif
 
+/** @brief Floating-point types supported by backend-specific operations. */
 template <typename T>
 concept supported_float =
   std::same_as<T, float> ||
   std::same_as<T, double>;
 
+/** @brief Arithmetic types accepted by reductions and atomic operations. */
 template <typename T>
 concept arithmetic = 
   (std::integral<T>        ||
@@ -88,9 +97,12 @@ concept arithmetic =
   !std::same_as<T, bool>   &&
   !std::same_as<T, char>;
 
+/** @brief CPU SIMD alignment in bytes. */
 inline constexpr auto simd_bytes{std::size_t{XPU_SIMD_BYTES}};
+/** @brief Alignment used for CUDA allocations. */
 inline constexpr auto cuda_align_bytes{128uz};
 
+/** @brief Whether this translation unit uses the CUDA backend. */
 inline constexpr auto xpu_cuda{
 #if defined(XPU_CUDA)
   true
@@ -99,6 +111,7 @@ inline constexpr auto xpu_cuda{
 #endif
 };
 
+/** @brief Alignment selected for the active backend. */
 inline constexpr auto alignment_bytes{
   xpu_cuda ? cuda_align_bytes : simd_bytes
 };

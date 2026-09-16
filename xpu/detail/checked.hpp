@@ -15,20 +15,26 @@
 
 namespace xpu::detail {
 
+/** @brief Integral types other than bool. */
 template <typename T>
 concept integer =
   std::integral<T> &&
   !std::same_as<T, bool>;
 
+/** @brief Unsigned integral types other than bool. */
 template <typename T>
 concept unsigned_integer =
   integer<T> &&
   std::unsigned_integral<T>;
 
+/** @brief Types whose object representations can be copied as bytes. */
 template <typename T>
 concept trivially_copyable =
   std::is_trivially_copyable_v<T>;
 
+/** @brief Print @p message and terminate on failed checked arithmetic.
+ *  @details Traps in device code and aborts on the host.
+ */
 CUDA_CALLABLE
 inline auto checked_error(const char* message) noexcept -> void {
 #if defined(__CUDA_ARCH__)
@@ -40,6 +46,7 @@ inline auto checked_error(const char* message) noexcept -> void {
 #endif
 }
 
+/** @brief Multiply unsigned integers, aborting on overflow. */
 template <unsigned_integer T> [[nodiscard]] CUDA_CALLABLE
 constexpr auto checked_mul(T a, T b) noexcept -> T {
   const auto overflow{a != 0 && b > xstd::numeric_limits<T>::max() / a};
@@ -53,6 +60,7 @@ constexpr auto checked_mul(T a, T b) noexcept -> T {
   return product;
 }
 
+/** @brief Add unsigned integers, aborting on overflow. */
 template <unsigned_integer T> [[nodiscard]] CUDA_CALLABLE
 constexpr auto checked_add(T a, T b) noexcept -> T {
   const auto overflow{b > xstd::numeric_limits<T>::max() - a};
@@ -66,6 +74,7 @@ constexpr auto checked_add(T a, T b) noexcept -> T {
   return sum;
 }
 
+/** @brief Round up to a nonzero multiple, aborting on overflow. */
 template <unsigned_integer T> [[nodiscard]] CUDA_CALLABLE
 constexpr auto checked_round_up(T count, T multiple) noexcept -> T {
   const auto zero_multiple{multiple == 0};
@@ -83,6 +92,7 @@ constexpr auto checked_round_up(T count, T multiple) noexcept -> T {
   return rounded_count;
 }
 
+/** @brief Convert an integer, aborting if the value is out of range. */
 template <integer To, integer From> [[nodiscard]] CUDA_CALLABLE
 constexpr auto checked_cast(From value) noexcept -> To {
   constexpr auto signed_to_unsigned{std::is_signed_v<From> && !std::is_signed_v<To>};
@@ -121,6 +131,7 @@ constexpr auto checked_cast(From value) noexcept -> To {
   return converted_value;
 }
 
+/** @brief Compute a byte count, aborting on multiplication overflow. */
 template <trivially_copyable T> [[nodiscard]] CUDA_CALLABLE
 constexpr auto checked_bytes(std::size_t count) noexcept -> std::size_t {
   const auto byte_count{checked_mul(count, sizeof(T))};

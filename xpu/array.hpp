@@ -10,6 +10,7 @@
 
 namespace xpu {
 
+/** @brief std::array on CPU and cuda::std::array on CUDA. */
 using xstd::array;
 
 }

@@ -12,8 +12,10 @@
 
 namespace xpu {
 
+/** @brief Standard mathematical constants from the active backend. */
 namespace numbers = xstd::numbers;
 
+/** @brief std::numeric_limits or cuda::std::numeric_limits. */
 using xstd::numeric_limits;
 
 } // namespace xpu

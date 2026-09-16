@@ -20,16 +20,22 @@
 
 namespace xpu {
 
+/** @brief Matrix factorization and solve operations. */
 namespace linalg {
 
+/** @brief Result of a matrix factorization. */
 enum class status {
+  /** @brief Factorization succeeded. */
   success,
+  /** @brief The matrix is singular. */
   singular,
+  /** @brief The matrix is not positive definite. */
   not_pd
 };
 
 namespace detail {
 
+/** @brief Report an unrecoverable linear algebra error and abort. */
 [[noreturn]]
 inline auto linalg_error(const char* message) noexcept -> void {
   std::fprintf(
@@ -42,6 +48,7 @@ inline auto linalg_error(const char* message) noexcept -> void {
 
 #if defined(XPU_CUDA)
 
+/** @brief Write ones on the diagonal and zeros elsewhere in a strided matrix. */
 template <supported_float T>
 struct build_identity {
   T* matrix;
@@ -60,6 +67,7 @@ struct build_identity {
   }
 };
 
+/** @brief Swap each pair of elements across a square matrix's diagonal. */
 template <supported_float T>
 struct transpose_square {
   T* matrix;
@@ -85,12 +93,16 @@ struct transpose_square {
   }
 };
 
+/** @brief Create a cuSOLVER handle or abort on failure. */
 inline auto create_cusolver_handle() -> cusolverDnHandle_t {
   auto handle{cusolverDnHandle_t{}};
   xpu::cu_check(cusolverDnCreate(&handle));
   return handle;
 }
 
+/** @brief Return the number of T elements cuSOLVER needs as workspace to
+ *  factor an @p order by @p order matrix with row stride @p stride by LU.
+ */
 template <supported_float T>
 inline auto getrf_workspace_size(
   cusolverDnHandle_t handle,
@@ -123,6 +135,9 @@ inline auto getrf_workspace_size(
   return workspace_size;
 }
 
+/** @brief Return the number of T elements cuSOLVER needs as workspace to
+ *  Cholesky-factor an @p order by @p order matrix with row stride @p stride.
+ */
 template <supported_float T>
 inline auto potrf_workspace_size(
   cusolverDnHandle_t handle,
@@ -155,6 +170,10 @@ inline auto potrf_workspace_size(
   return workspace_size;
 }
 
+/** @brief Overwrite @p matrix with its LU factors and write pivot indices and
+ *  the vendor result code to @p pivot and @p info.
+ *  @details Uses the single- or double-precision cuSOLVER routine for T.
+ */
 template <supported_float T>
 inline auto cusolver_getrf(
   cusolverDnHandle_t handle,
@@ -185,6 +204,10 @@ inline auto cusolver_getrf(
   }
 }
 
+/** @brief Overwrite one triangle of @p matrix with its Cholesky factor and
+ *  write the vendor result code to @p info.
+ *  @details Passes CUBLAS_FILL_MODE_UPPER to cuSOLVER.
+ */
 template <supported_float T>
 inline auto cusolver_potrf(
   cusolverDnHandle_t handle,
@@ -218,6 +241,11 @@ inline auto cusolver_potrf(
   }
 }
 
+/** @brief Overwrite @p solution with the solution of a system factored by
+ *  cusolver_getrf().
+ *  @details @p operation selects whether cuSOLVER solves the transposed system.
+ *  The vendor result code is written to @p info.
+ */
 template <supported_float T>
 inline auto cusolver_getrs(
   cusolverDnHandle_t handle,
@@ -257,6 +285,9 @@ inline auto cusolver_getrs(
   }
 }
 
+/** @brief Overwrite @p solution with the solution of a system factored by
+ *  cusolver_potrf(), writing the vendor result code to @p info.
+ */
 template <supported_float T>
 inline auto cusolver_potrs(
   cusolverDnHandle_t handle,
@@ -294,6 +325,9 @@ inline auto cusolver_potrs(
 
 #else
 
+/** @brief Overwrite a row-major @p matrix with LU factors, fill @p pivot,
+ *  and return LAPACKE's result code.
+ */
 template <supported_float T>
 inline auto lapacke_getrf(
   T* RESTRICT matrix,
@@ -321,6 +355,9 @@ inline auto lapacke_getrf(
   }
 }
 
+/** @brief Overwrite the lower triangle of a row-major @p matrix with its
+ *  Cholesky factor and return LAPACKE's result code.
+ */
 template <supported_float T>
 inline auto lapacke_potrf(
   T* RESTRICT matrix,
@@ -345,6 +382,9 @@ inline auto lapacke_potrf(
   }
 }
 
+/** @brief Overwrite @p inverse, containing LU factors, with the inverse
+ *  computed using @p pivot; return LAPACKE's result code.
+ */
 template <supported_float T>
 inline auto lapacke_getri(
   T* RESTRICT inverse,
@@ -372,6 +412,9 @@ inline auto lapacke_getri(
   }
 }
 
+/** @brief Overwrite @p solution with the solution of one right-hand side
+ *  using @p lower_upper and @p pivot; return LAPACKE's result code.
+ */
 template <supported_float T>
 inline auto lapacke_getrs(
   const T* RESTRICT lower_upper,
@@ -402,6 +445,9 @@ inline auto lapacke_getrs(
   }
 }
 
+/** @brief Overwrite @p solution with the solution of one right-hand side
+ *  using the lower-triangular Cholesky factor; return LAPACKE's result code.
+ */
 template <supported_float T>
 inline auto lapacke_potrs(
   const T* RESTRICT lower_upper,
@@ -433,6 +479,9 @@ inline auto lapacke_potrs(
 
 } // namespace xpu::linalg::detail
 
+/** @brief Transpose a square row-major matrix in place.
+ *  @pre @p stride is at least @p order.
+ */
 template <supported_float T>
 inline auto transpose_square(
   T* RESTRICT matrix,
@@ -484,6 +533,9 @@ inline auto transpose_square(
 #endif
 }
 
+/** @brief Reuse the Cholesky factor of a positive-definite matrix for
+ *  multiple linear solves.
+ */
 template <supported_float T>
 class cholesky_factorization {
 private:
@@ -503,6 +555,10 @@ private:
   xpu::buffer<int> info_;
 #endif
 
+  /** @brief Return @p order after checking that both dimensions fit the
+   *  backend integer type, @p stride is at least @p order, and the matrix
+   *  byte count does not overflow.
+   */
   [[nodiscard]]
   static auto checked_order(std::size_t order, std::size_t stride) noexcept -> std::size_t {
     static_cast<void>(xpu::detail::checked_cast<dimension_type>(order));
@@ -522,6 +578,9 @@ private:
   }
 
 public:
+  /** @brief Prepare to factor an @p order by @p order row-major matrix
+   *  with @p stride elements between rows.
+   */
   cholesky_factorization(std::size_t order, std::size_t stride)
     : order_{checked_order(order, stride)}
     , stride_{stride}
@@ -532,22 +591,30 @@ public:
 #endif
   { }
 
+  /** @brief Destroy the cuSOLVER handle on CUDA. */
   ~cholesky_factorization() {
 #if defined(XPU_CUDA)
     xpu::cu_check(cusolverDnDestroy(handle_));
 #endif
   }
 
+  /** @brief Return the matrix order. */
   [[nodiscard]]
   constexpr auto order() const noexcept -> std::size_t {
     return order_;
   }
 
+  /** @brief Return the distance in elements between matrix rows. */
   [[nodiscard]]
   constexpr auto stride() const noexcept -> std::size_t {
     return stride_;
   }
 
+  /** @brief Factor @p matrix in place for later solves.
+   *  @return status::success if positive definite, otherwise status::not_pd.
+   *  On success, the lower triangle contains the factor. Any call replaces
+   *  the previous factorization.
+   */
   [[nodiscard]]
   auto factorize(T* RESTRICT matrix) noexcept -> status {
     factor_ = nullptr;
@@ -578,6 +645,11 @@ public:
     return status::success;
   }
 
+  /** @brief Solve the most recently factorized system with right-hand side
+   *  @p rhs, writing the result to @p solution without changing @p rhs.
+   *  @pre @p factor is the matrix passed to the successful factorize() call.
+   *  @pre @p rhs and @p solution do not alias.
+   */
   auto solve(
     const T* RESTRICT factor,
     const T* RESTRICT rhs,
@@ -626,6 +698,8 @@ public:
   cholesky_factorization(cholesky_factorization&&) = delete;
 };
 
+/** @brief Reuse the LU factor of a square matrix for linear solves or inversion.
+ */
 template <supported_float T>
 class lu_factorization {
 private:
@@ -648,6 +722,10 @@ private:
   xpu::buffer<lapack_int> pivot_;
 #endif
 
+  /** @brief Return @p order after checking that both dimensions fit the
+   *  backend integer type, @p stride is at least @p order, and the matrix
+   *  byte count does not overflow.
+   */
   [[nodiscard]]
   static auto checked_order(std::size_t order, std::size_t stride) noexcept -> std::size_t {
     static_cast<void>(xpu::detail::checked_cast<dimension_type>(order));
@@ -667,6 +745,9 @@ private:
   }
 
 public:
+  /** @brief Prepare to factor an @p order by @p order row-major matrix
+   *  with @p stride elements between rows.
+   */
   lu_factorization(std::size_t order, std::size_t stride)
     : order_{checked_order(order, stride)}
     , stride_{stride}
@@ -680,22 +761,29 @@ public:
 #endif
   { }
 
+  /** @brief Destroy the cuSOLVER handle on CUDA. */
   ~lu_factorization() {
 #if defined(XPU_CUDA)
     xpu::cu_check(cusolverDnDestroy(handle_));
 #endif
   }
 
+  /** @brief Return the matrix order. */
   [[nodiscard]]
   constexpr auto order() const noexcept -> std::size_t {
     return order_;
   }
 
+  /** @brief Return the distance in elements between matrix rows. */
   [[nodiscard]]
   constexpr auto stride() const noexcept -> std::size_t {
     return stride_;
   }
 
+  /** @brief Factor @p matrix in place for later solves or inversion.
+   *  @return status::success if nonsingular, otherwise status::singular.
+   *  Any call replaces the previous factorization.
+   */
   [[nodiscard]]
   auto factorize(T* RESTRICT matrix) noexcept -> status {
     lower_upper_ = nullptr;
@@ -728,6 +816,11 @@ public:
     return status::success;
   }
 
+  /** @brief Solve the most recently factorized system with right-hand side
+   *  @p rhs, writing the result to @p solution without changing @p rhs.
+   *  @pre @p lower_upper is the matrix passed to the successful factorize() call.
+   *  @pre @p rhs and @p solution do not alias.
+   */
   auto solve(
     const T* RESTRICT lower_upper,
     const T* RESTRICT rhs,
@@ -772,6 +865,11 @@ public:
 #endif
   }
 
+  /** @brief Write the inverse of the most recently factorized matrix to
+   *  @p inverse using the same row stride as the factorized matrix.
+   *  @pre @p lower_upper is the matrix passed to the successful factorize() call.
+   *  @pre @p lower_upper and @p inverse do not alias.
+   */
   auto invert(
     const T* RESTRICT lower_upper,
     T* RESTRICT inverse

@@ -17,6 +17,7 @@
 
 namespace xpu {
 
+/** @brief Fill the first @p count elements of @p ptr with @p value. */
 template <typename T>
 inline auto fill_n(
   T* RESTRICT ptr, 

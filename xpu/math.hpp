@@ -23,6 +23,10 @@
 
 namespace xpu {
 
+/** @name Standard math functions
+ *  @brief Functions imported from the active backend's standard library.
+ *  @{
+ */
 // exp / log
 using xstd::exp;   using xstd::expm1;
 using xstd::log;   using xstd::log2;
@@ -64,8 +68,11 @@ using xstd::isfinite; using xstd::isnormal;
 
 // decomposition
 using xstd::ldexp; using xstd::frexp; using xstd::modf;
+/** @} */
 
-// Overflow safe version of (num + den - 1) / den
+/** @brief Compute the ceiling of @p num divided by @p den without overflow.
+ *  @pre @p den is nonzero; a zero denominator aborts.
+ */
 template <std::unsigned_integral T> [[nodiscard]] CUDA_CALLABLE
 inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
   const auto zero_denominator{den == 0};
@@ -79,6 +86,7 @@ inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
   return quotient;
 }
 
+/** @brief Write the sine and cosine of @p arg to @p s and @p c. */
 template <std::floating_point T> CUDA_CALLABLE
 inline auto sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept -> void {
 #if defined(__CUDA_ARCH__)
@@ -89,6 +97,7 @@ inline auto sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept -> void {
 #endif
 }
 
+/** @brief Return the reciprocal square root of @p x. */
 template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
 inline auto rsqrt(T x) noexcept -> T {
 #if defined(__CUDA_ARCH__)
@@ -98,6 +107,7 @@ inline auto rsqrt(T x) noexcept -> T {
 #endif
 }
 
+/** @brief Return the Euclidean norm of three components. */
 template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
 inline auto norm3d(T x, T y, T z) noexcept -> T {
 #if defined(__CUDA_ARCH__)
@@ -108,6 +118,7 @@ inline auto norm3d(T x, T y, T z) noexcept -> T {
 #endif
 }
 
+/** @brief Return the reciprocal Euclidean norm of three components. */
 template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
 inline auto rnorm3d(T x, T y, T z) noexcept -> T {
 #if defined(__CUDA_ARCH__)
@@ -118,6 +129,7 @@ inline auto rnorm3d(T x, T y, T z) noexcept -> T {
 #endif
 }
 
+/** @brief Add @p value to @p ptr atomically with relaxed ordering on CPU. */
 template <arithmetic T> CUDA_CALLABLE
 inline auto atomic_add(T* ptr, T value) noexcept -> void {
 #if defined(__CUDA_ARCH__)
