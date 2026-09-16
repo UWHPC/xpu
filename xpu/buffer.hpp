@@ -1,9 +1,45 @@
 #pragma once
 
+#include <cassert>
+#include <cstddef>
+#include <iostream>
 #include <xpu/config.hpp>
 #include <xpu/memory.hpp>
 
+#include <type_traits>
+
 namespace xpu {
+
+template <typename T>
+class buffer_view {
+private:
+  T* data_;
+  std::size_t count_;
+
+public:
+  CUDA_CALLABLE
+  explicit constexpr buffer_view(T* base, std::size_t count) noexcept
+    : data_{base}
+    , count_{count}
+  { }
+
+  [[nodiscard]] CUDA_CALLABLE
+  constexpr auto count() const noexcept -> std::size_t {
+    return count_;
+  }
+
+  template <typename Self> [[nodiscard]] CUDA_CALLABLE
+  constexpr auto& operator[](this Self&& self, std::size_t idx) noexcept {
+    assert(idx < self.count_);
+
+    using element_t = std::conditional_t<
+      std::is_const_v<std::remove_reference_t<Self>>,
+      const T, T
+    >;
+
+    return static_cast<element_t*>(self.data_)[idx];
+  }
+};
 
 template <typename T>
 class buffer {
@@ -27,14 +63,26 @@ public:
     return xpu::handle_pad<T>(count_);
   }
 
-  [[nodiscard]]
-  auto data() noexcept -> T* {
-    return xpu::assume_aligned<T>(data_.get());
+  template <typename Self> [[nodiscard]]
+  auto data(this Self&& self) noexcept {
+    using element_t = std::conditional_t<
+      std::is_const_v<std::remove_reference_t<Self>>,
+      const T, T
+    >;
+
+    return xpu::assume_aligned<element_t>(self.data_.get());
   }
 
-  [[nodiscard]]
-  auto data() const noexcept -> const T* {
-    return xpu::assume_aligned<const T>(data_.get());
+  template <typename Self> [[nodiscard]]
+  auto view(this Self&& self) noexcept {
+    using element_t = std::conditional_t<
+      std::is_const_v<std::remove_reference_t<Self>>,
+      const T, T
+    >;
+
+    return xpu::buffer_view<element_t>{
+      self.data(), self.count_
+    };
   }
 };
 
