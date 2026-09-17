@@ -27,7 +27,7 @@ public:
     , count_{count}
   {
     const auto storage_count{xpu::detail::checked_mul(exposed_arrays, stride())};
-    static_cast<void>(xpu::detail::checked_bytes<T>(storage_count));
+  static_cast<void>(bytes<T>(storage_count));
   }
 
   [[nodiscard]] CUDA_CALLABLE
@@ -50,7 +50,7 @@ public:
     >;
 
     return xpu::assume_aligned<element_t>(
-      self.base_ + arr_idx * self.stride()
+      self.base_ + (arr_idx * self.stride())
     );
   }
 
@@ -118,7 +118,7 @@ public:
     >;
 
     return xpu::soa_view<element_t, exposed_arrays>{
-      self.base_ + batch * self.batch_stride(), self.count_
+      self.base_ + (batch * self.batch_stride()), self.count_
     };
   }
 };
@@ -167,7 +167,7 @@ public:
     >;
 
     return xpu::assume_aligned<element_t>(
-      self.buffer_.data() + arr_idx * self.stride()
+      self.buffer_.data() + (arr_idx * self.stride())
     );
   }
 
@@ -185,7 +185,7 @@ public:
     >;
     
     return soa_view<element_t, exposed_arrays>{
-      self.buffer_.data() + first_array * self.stride(), self.count_
+      self.buffer_.data() + (first_array * self.stride()), self.count_
     };
   }
 };
@@ -261,7 +261,7 @@ public:
     >;
 
     return xpu::soa_batch_view<element_t, exposed_arrays, num_arrays>{
-      self.storage_.data() + first_array * self.array_stride(),
+      self.storage_.data() + (first_array * self.array_stride()),
       self.batches_, self.count_
     };
   }
@@ -283,7 +283,7 @@ public:
     >;
 
     return xpu::soa_view<element_t, exposed_arrays>{
-      self.storage_.data() + batch * self.batch_stride() + first_array * self.array_stride(),
+      self.storage_.data() + (batch * self.batch_stride()) + (first_array * self.array_stride()),
       self.element_count()
     };
   }

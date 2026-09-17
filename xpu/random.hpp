@@ -15,12 +15,15 @@
 #include <cstdint>
 #include <limits>
 
-namespace xpu {
 
-namespace random {
+
+namespace xpu::random {
 
 class generator {
 private:
+
+static constexpr auto uint32_MAX{std::numeric_limits<std::uint32_t>::digits}; 
+
 #if defined(XPU_CUDA)
   curandStatePhilox4_32_10_t engine_;
 
@@ -51,9 +54,9 @@ public:
 #else
     auto seed{std::seed_seq{
       static_cast<std::uint32_t>(master_seed),
-      static_cast<std::uint32_t>(master_seed >> 32u),
+      static_cast<std::uint32_t>(master_seed >> uint32_MAX),
       static_cast<std::uint32_t>(stream_id),
-      static_cast<std::uint32_t>(stream_id >> 32u)
+      static_cast<std::uint32_t>(stream_id >> uint32_MAX)
     }};
     engine_.seed(seed);
     engine_.discard(offset);
@@ -76,7 +79,7 @@ public:
   template <supported_float T> [[nodiscard]] DEVICE_ONLY
   auto uniform(T minimum, T maximum) -> T {
     assert(minimum < maximum);
-    const auto value{minimum + (maximum - minimum) * uniform<T>()};
+    const auto value{minimum + ((maximum - minimum) * uniform<T>())};
     if (value < maximum) { return value; }
 
 #if defined(XPU_CUDA)
@@ -139,13 +142,13 @@ inline auto seed_n(
   std::uint64_t offset = 0
 ) -> void {
   const auto range = xpu::range<1uz>{
-    {0uz},
-    {count},
-    {1uz}
+    .begin={0uz},
+    .end={count},
+    .step={1uz}
   };
 
   const auto seed = detail::seed_generators{
-    generators, stream_ids, master_seed, offset
+    .generators=generators, .stream_ids=stream_ids, .master_seed=master_seed, .offset=offset
   };
 
   xpu::parallel_for(range, seed);
@@ -153,4 +156,4 @@ inline auto seed_n(
 
 } // namespace xpu::random
 
-} // namespace xpu
+
