@@ -1,5 +1,6 @@
 #pragma once
 
+#include <print>
 #include <xpu/algorithm.hpp>
 #include <xpu/config.hpp>
 #include <xpu/detail/checked.hpp>
@@ -14,13 +15,13 @@
 namespace xpu {
 
 template <typename T>
-inline constexpr auto default_align{(xpu::alignment_bytes > alignof(T)) ? xpu::alignment_bytes : alignof(T)};
+constexpr auto default_align{(xpu::alignment_bytes > alignof(T)) ? xpu::alignment_bytes : alignof(T)};
 
 template <typename T>
-inline constexpr auto is_padded{sizeof(T) < xpu::alignment_bytes};
+constexpr auto is_padded{sizeof(T) < xpu::alignment_bytes};
 
 template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
-inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
+constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
   static_assert(std::is_trivially_copyable_v<T>, "ERROR: xpu::bytes requires a trivially copyable type");
   const auto byte_count{xpu::detail::checked_bytes<T>(count)};
 
@@ -28,7 +29,7 @@ inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
 }
 
 template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
-inline constexpr auto handle_pad(std::size_t unpadded) noexcept -> std::size_t {
+constexpr auto handle_pad(std::size_t unpadded) noexcept -> std::size_t {
   if constexpr (is_padded<T>) {
     constexpr auto lanes{xpu::alignment_bytes / sizeof(T)};
     const auto padded_count{xpu::detail::checked_round_up(unpadded, lanes)};
@@ -40,24 +41,22 @@ inline constexpr auto handle_pad(std::size_t unpadded) noexcept -> std::size_t {
 }
 
 template <typename T> [[nodiscard]]
-inline auto alloc(std::size_t count) -> T* {
+auto alloc(std::size_t count) -> T* {
   static_assert(std::is_trivially_copyable_v<T>);
   if (count == 0uz) { return nullptr; }
 
-  const auto bytes{xpu::detail::checked_bytes<T>(count)};
-
 #if defined(XPU_CUDA)
   auto ptr{static_cast<void*>(nullptr)};
-  if(cudaMalloc(&ptr, bytes) != cudaSuccess) { ptr = nullptr; }
+  if(cudaMalloc(&ptr, bytes<T>(count)) != cudaSuccess) { ptr = nullptr; }
 #else
-  auto ptr{::operator new(bytes, std::align_val_t{default_align<T>}, std::nothrow)};
+  auto ptr{::operator new(bytes<T>(count), std::align_val_t{default_align<T>}, std::nothrow)};
 #endif
 
   if (!ptr) {
     std::fprintf(
       stderr,
-      "xpu: failed to allocate %zu bytes\n",
-      bytes
+      "xpu: failed to allocate {:d} bytes",
+      bytes<T>(count)
     );
     std::abort();
   }
@@ -66,7 +65,7 @@ inline auto alloc(std::size_t count) -> T* {
 }
 
 template <typename T>
-inline auto free(T* ptr) noexcept -> void {
+auto free(T* ptr) noexcept -> void {
   if (!ptr) { return; }
 
 #if defined(XPU_CUDA)
@@ -87,6 +86,11 @@ template <typename T>
 using unique_ptr = std::unique_ptr<T[], xpu::deleter<T>>;
 
 template <typename T>
+auto make_unique(T value = T{}) -> unique_ptr<T> {
+  return xpu::make_unique<T>(1uz, std::move(value));
+}
+
+template <typename T>
 auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
   auto* XPU_RESTRICT ptr{xpu::alloc<T>(count)};
 
@@ -97,8 +101,10 @@ auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
 
 template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto assume_aligned(T* ptr) noexcept -> T* {
+  if constexpr (!is_padded<T>) { return ptr; }
   return xstd::assume_aligned<default_align<T>>(ptr);
 }
+
 
 inline auto memset(
   void* XPU_RESTRICT dst,
@@ -129,7 +135,7 @@ inline auto memcpy(
 }
 
 template <typename T>
-inline auto copy_n(
+auto copy_n(
   T* XPU_RESTRICT dst,
   const T* XPU_RESTRICT src,
   std::size_t count
@@ -139,13 +145,11 @@ inline auto copy_n(
     "ERROR: xpu::copy_n requires trivially copyable type"
   );
 
-  const auto byte_count{xpu::detail::checked_bytes<T>(count)};
-
-  xpu::memcpy(dst, src, byte_count);
+  xpu::memcpy(dst, src, bytes<T>(count));
 }
 
 template <typename T>
-inline auto zero_n(
+auto zero_n(
   T* XPU_RESTRICT dst,
   std::size_t count
 ) noexcept -> void {
@@ -154,9 +158,7 @@ inline auto zero_n(
     "ERROR: xpu::zero_n requires arithmetic type"
   );
 
-  const auto byte_count{xpu::detail::checked_bytes<T>(count)};
-
-  xpu::memset(dst, 0, byte_count);
+  xpu::memset(dst, 0, bytes<T>(count));
 }
 
 } // namespace xpu
