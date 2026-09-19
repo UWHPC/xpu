@@ -26,7 +26,7 @@ public:
     : base_{base}
     , count_{count}
   {
-    const auto storage_count{xpu::detail::checked_mul(exposed_arrays, stride())};
+    const auto storage_count{detail::checked_mul(exposed_arrays, stride())};
   static_cast<void>(bytes<T>(storage_count));
   }
 
@@ -37,7 +37,7 @@ public:
 
   [[nodiscard]] CUDA_CALLABLE
   constexpr auto stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return handle_pad<T>(count_);
   }
 
   template <typename Self> [[nodiscard]] CUDA_CALLABLE
@@ -49,14 +49,14 @@ public:
       const T, T
     >;
 
-    return xpu::assume_aligned<element_t>(
+    return assume_aligned<element_t>(
       self.base_ + (arr_idx * self.stride())
     );
   }
 
   template <typename Self> [[nodiscard]] CUDA_CALLABLE
   constexpr auto pointers(this Self&& self) noexcept {
-    auto ptrs{xpu::array<decltype(self[0uz]), exposed_arrays>{}};
+    auto ptrs{array<decltype(self[0uz]), exposed_arrays>{}};
 
     for (auto i{0uz}; i < exposed_arrays; ++i) {
       ptrs[i] = self[i];
@@ -100,7 +100,7 @@ public:
 
   [[nodiscard]] CUDA_CALLABLE
   constexpr auto array_stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return handle_pad<T>(count_);
   }
 
   [[nodiscard]] CUDA_CALLABLE
@@ -117,7 +117,7 @@ public:
       const T, T
     >;
 
-    return xpu::soa_view<element_t, exposed_arrays>{
+    return soa_view<element_t, exposed_arrays>{
       self.base_ + (batch * self.batch_stride()), self.count_
     };
   }
@@ -129,15 +129,15 @@ class soa {
 
 private:
   std::size_t count_;
-  xpu::buffer<T> buffer_;
+  buffer<T> buffer_;
 
 public:
   explicit soa(std::size_t count) noexcept
     : count_{count}
     , buffer_{
-        xpu::detail::checked_mul(
+        detail::checked_mul(
           num_arrays,
-          xpu::handle_pad<T>(count)
+          handle_pad<T>(count)
         )
       }
   { }
@@ -149,7 +149,7 @@ public:
 
   [[nodiscard]]
   constexpr auto stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return handle_pad<T>(count_);
   }
 
   [[nodiscard]]
@@ -166,7 +166,7 @@ public:
       const T, T
     >;
 
-    return xpu::assume_aligned<element_t>(
+    return assume_aligned<element_t>(
       self.buffer_.data() + (arr_idx * self.stride())
     );
   }
@@ -177,7 +177,7 @@ public:
     typename Self
   > [[nodiscard]]
   auto view(this Self&& self) noexcept {
-    static_assert(xpu::detail::checked_add(first_array, exposed_arrays) <= num_arrays);
+    static_assert(detail::checked_add(first_array, exposed_arrays) <= num_arrays);
 
     using element_t = std::conditional_t<
       std::is_const_v<std::remove_reference_t<Self>>,
@@ -204,11 +204,11 @@ public:
     : batches_{batches}
     , count_{count}
     , storage_{
-        xpu::detail::checked_mul(
+        detail::checked_mul(
           batches,
-          xpu::detail::checked_mul(
+          detail::checked_mul(
             num_arrays,
-            xpu::handle_pad<T>(count)
+            handle_pad<T>(count)
           )
         )
       }
@@ -231,7 +231,7 @@ public:
 
   [[nodiscard]] CUDA_CALLABLE
   constexpr auto array_stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return handle_pad<T>(count_);
   }
 
   [[nodiscard]] CUDA_CALLABLE
@@ -251,7 +251,7 @@ public:
   > [[nodiscard]]
   auto view(this Self&& self) noexcept {
     static_assert(
-      xpu::detail::checked_add(first_array, exposed_arrays) <= num_arrays,
+      detail::checked_add(first_array, exposed_arrays) <= num_arrays,
       "ERROR: number of viewed arrays is too large"
     );
 
@@ -260,7 +260,7 @@ public:
       const T, T
     >;
 
-    return xpu::soa_batch_view<element_t, exposed_arrays, num_arrays>{
+    return soa_batch_view<element_t, exposed_arrays, num_arrays>{
       self.storage_.data() + (first_array * self.array_stride()),
       self.batches_, self.count_
     };
@@ -273,7 +273,7 @@ public:
   > [[nodiscard]]
   auto view(this Self&& self, std::size_t batch) noexcept {
     static_assert(exposed_arrays <= num_arrays, "ERROR: exposed arrays is greater than number of arrays");
-    static_assert(xpu::detail::checked_add(first_array, exposed_arrays) <= num_arrays,
+    static_assert(detail::checked_add(first_array, exposed_arrays) <= num_arrays,
       "ERROR: number of viewed arrays is too large");
     assert(batch < self.batches_);
 
@@ -282,7 +282,7 @@ public:
       const T, T
     >;
 
-    return xpu::soa_view<element_t, exposed_arrays>{
+    return soa_view<element_t, exposed_arrays>{
       self.storage_.data() + (batch * self.batch_stride()) + (first_array * self.array_stride()),
       self.element_count()
     };

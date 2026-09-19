@@ -125,7 +125,7 @@ struct seed_generators {
   std::uint64_t offset;
 
   DEVICE_ONLY
-  auto operator()(const xpu::array<std::size_t, 1uz>& index) const -> void {
+  auto operator()(const array<std::size_t, 1uz>& index) const -> void {
     const auto i{index[0]};
 
     generators[i].seed(master_seed, stream_ids[i], offset);
@@ -151,7 +151,7 @@ inline auto seed_n(
     .generators=generators, .stream_ids=stream_ids, .master_seed=master_seed, .offset=offset
   };
 
-  xpu::parallel_for(range, seed);
+  parallel_for(range, seed);
 }
 
 } // namespace xpu::random
