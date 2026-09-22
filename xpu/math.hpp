@@ -67,25 +67,26 @@ using xstd::ldexp; using xstd::frexp; using xstd::modf;
 
 // Overflow safe version of (num + den - 1) / den
 template <std::unsigned_integral T> [[nodiscard]] CUDA_CALLABLE
-inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
+constexpr auto ceiling_div(T num, T den) noexcept -> T {
   const auto zero_denominator{den == 0};
 
   if (zero_denominator) {
     xpu::detail::checked_error("zero ceiling division denominator");
   }
 
-  const auto quotient{num / den + (num % den != 0)};
+  const auto quotient{ ( num / den ) + (num % den != 0)};
 
   return quotient;
 }
 
+
 template <std::floating_point T> CUDA_CALLABLE
-inline auto sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept -> void {
+inline auto sincos(T arg, T* RESTRICT sin, T* RESTRICT cos) noexcept -> void {
 #if defined(__CUDA_ARCH__)
-  if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
-  else { ::sincos(arg, s, c); }
+  if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, sin, cos); }
+  else { ::sincos(arg, sin, cos); }
 #else
-  *s = xpu::sin(arg); *c = xpu::cos(arg);
+  *sin = xpu::sin(arg); *cos = xpu::cos(arg);
 #endif
 }
 
