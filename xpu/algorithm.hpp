@@ -19,7 +19,7 @@ namespace xpu {
 
 template <typename T>
 inline auto fill_n(
-  T* RESTRICT ptr, 
+  T* XPU_RESTRICT ptr,
   std::size_t count,
   T value
 ) -> void {

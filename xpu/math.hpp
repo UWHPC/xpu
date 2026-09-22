@@ -66,7 +66,7 @@ using xstd::isfinite; using xstd::isnormal;
 using xstd::ldexp; using xstd::frexp; using xstd::modf;
 
 // Overflow safe version of (num + den - 1) / den
-template <std::unsigned_integral T> [[nodiscard]] CUDA_CALLABLE
+template <std::unsigned_integral T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
   const auto zero_denominator{den == 0};
 
@@ -79,8 +79,8 @@ inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
   return quotient;
 }
 
-template <std::floating_point T> CUDA_CALLABLE
-inline auto sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept -> void {
+template <std::floating_point T> XPU_CUDA_CALLABLE
+inline auto sincos(T arg, T* XPU_RESTRICT s, T* XPU_RESTRICT c) noexcept -> void {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
   else { ::sincos(arg, s, c); }
@@ -89,7 +89,7 @@ inline auto sincos(T arg, T* RESTRICT s, T* RESTRICT c) noexcept -> void {
 #endif
 }
 
-template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
+template <std::floating_point T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline auto rsqrt(T x) noexcept -> T {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::rsqrtf(x); } else { return ::rsqrt(x); }
@@ -98,7 +98,7 @@ inline auto rsqrt(T x) noexcept -> T {
 #endif
 }
 
-template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
+template <std::floating_point T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline auto norm3d(T x, T y, T z) noexcept -> T {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::norm3df(x, y, z); }
@@ -108,7 +108,7 @@ inline auto norm3d(T x, T y, T z) noexcept -> T {
 #endif
 }
 
-template <std::floating_point T> [[nodiscard]] CUDA_CALLABLE
+template <std::floating_point T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline auto rnorm3d(T x, T y, T z) noexcept -> T {
 #if defined(__CUDA_ARCH__)
   if constexpr (std::is_same_v<T, float>) { return ::rnorm3df(x, y, z); }
@@ -118,7 +118,7 @@ inline auto rnorm3d(T x, T y, T z) noexcept -> T {
 #endif
 }
 
-template <arithmetic T> CUDA_CALLABLE
+template <arithmetic T> XPU_CUDA_CALLABLE
 inline auto atomic_add(T* ptr, T value) noexcept -> void {
 #if defined(__CUDA_ARCH__)
   atomicAdd(ptr, value);

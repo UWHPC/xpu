@@ -46,7 +46,7 @@ struct compare_seeded_generators {
   std::uint64_t master_seed;
   std::uint64_t offset;
 
-  DEVICE_ONLY
+  XPU_DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 1uz>& index) const -> void {
     const auto i{index[0]};
     auto reference{xpu::random::generator{}};

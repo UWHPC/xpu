@@ -48,22 +48,24 @@ inline auto cu_check(
 
 #endif
 
-#if defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
-  #define RESTRICT __restrict
+#define XPU_FORCE_INLINE inline __attribute__((always_inline))
+
+#if defined(__GNUC__) || defined(__clang__)
+  #define XPU_RESTRICT __restrict
 #else
-  #define RESTRICT
+  #define XPU_RESTRICT
 #endif
 
 #if defined(XPU_CUDA)
-  #define CUDA_CALLABLE __host__ __device__
+  #define XPU_CUDA_CALLABLE __host__ __device__
 #else
-  #define CUDA_CALLABLE
+  #define XPU_CUDA_CALLABLE
 #endif
 
 #if defined(XPU_CUDA)
-  #define DEVICE_ONLY __device__
+  #define XPU_DEVICE_ONLY __device__
 #else
-  #define DEVICE_ONLY
+  #define XPU_DEVICE_ONLY
 #endif
 
 #ifndef XPU_SIMD_BYTES

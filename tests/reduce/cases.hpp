@@ -10,14 +10,14 @@
 
 template <typename T>
 struct sum_values {
-  [[nodiscard]] DEVICE_ONLY
+  [[nodiscard]] XPU_DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 2uz>&) -> T {
     const auto value{T{-1}};
 
     return value;
   }
 
-  [[nodiscard]] DEVICE_ONLY
+  [[nodiscard]] XPU_DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 2uz>& index) const -> T {
     const auto value{static_cast<T>(index[0] + index[1] % 7uz)};
 
@@ -26,7 +26,7 @@ struct sum_values {
 };
 
 struct nonconst_sum {
-  DEVICE_ONLY
+  XPU_DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 2uz>&) -> int;
 };
 
@@ -100,7 +100,7 @@ inline auto run_sum_type() -> int {
 }
 
 struct sum_coordinates {
-  template <std::size_t dims> [[nodiscard]] DEVICE_ONLY
+  template <std::size_t dims> [[nodiscard]] XPU_DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, dims>& index) const -> int {
     auto value{0};
 

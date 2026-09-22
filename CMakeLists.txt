@@ -84,6 +84,11 @@ if(XPU_CUDA)
   target_link_libraries(xpu INTERFACE CUDA::cudart)
 
   target_compile_options(xpu INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:-std=c++23>)
+else()
+  find_package(OpenMP QUIET COMPONENTS CXX)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(xpu INTERFACE OpenMP::OpenMP_CXX)
+  endif()
 endif()
 
 if(XPU_ENABLE_LINALG)

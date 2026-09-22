@@ -16,6 +16,19 @@ The project is in early development. The API may change.
 - Linux, or Windows through WSL2, for CUDA builds
 
 The base CPU-only library has no external dependencies.
+CPU builds use OpenMP when CMake finds it; otherwise execution is serial.
+
+On the CPU, `xpu::parallel_for` parallelizes the outermost range dimension
+and applies OpenMP SIMD to the innermost dimension. One-dimensional ranges
+use a combined `parallel for simd` loop. Callbacks must support independent
+iterations, avoid unsynchronized shared writes, and must not throw exceptions.
+SIMD code generation depends on the callback and compiler.
+Zero-origin, unit-step CPU ranges select a specialized loop without coordinate
+scaling or offsets. Range validation runs once before entering the parallel loop.
+With OpenMP enabled, copyable CPU callbacks are copied per thread; mutations to
+the callable's own state do not update the original. Captured pointers and
+references still access the same data. Noncopyable callbacks are shared between
+threads. Without OpenMP, the original callback is used directly.
 
 ## Building
 

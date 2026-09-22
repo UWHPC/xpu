@@ -29,7 +29,7 @@ template <typename T>
 concept trivially_copyable =
   std::is_trivially_copyable_v<T>;
 
-CUDA_CALLABLE
+XPU_CUDA_CALLABLE
 inline auto checked_error(const char* message) noexcept -> void {
 #if defined(__CUDA_ARCH__)
   printf("xpu: %s\n", message);
@@ -40,7 +40,7 @@ inline auto checked_error(const char* message) noexcept -> void {
 #endif
 }
 
-template <unsigned_integer T> [[nodiscard]] CUDA_CALLABLE
+template <unsigned_integer T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto checked_mul(T a, T b) noexcept -> T {
   const auto overflow{a != 0 && b > xstd::numeric_limits<T>::max() / a};
 
@@ -53,7 +53,7 @@ constexpr auto checked_mul(T a, T b) noexcept -> T {
   return product;
 }
 
-template <unsigned_integer T> [[nodiscard]] CUDA_CALLABLE
+template <unsigned_integer T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto checked_add(T a, T b) noexcept -> T {
   const auto overflow{b > xstd::numeric_limits<T>::max() - a};
 
@@ -66,7 +66,7 @@ constexpr auto checked_add(T a, T b) noexcept -> T {
   return sum;
 }
 
-template <unsigned_integer T> [[nodiscard]] CUDA_CALLABLE
+template <unsigned_integer T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto checked_round_up(T count, T multiple) noexcept -> T {
   const auto zero_multiple{multiple == 0};
 
@@ -83,7 +83,7 @@ constexpr auto checked_round_up(T count, T multiple) noexcept -> T {
   return rounded_count;
 }
 
-template <integer To, integer From> [[nodiscard]] CUDA_CALLABLE
+template <integer To, integer From> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto checked_cast(From value) noexcept -> To {
   constexpr auto signed_to_unsigned{std::is_signed_v<From> && !std::is_signed_v<To>};
   constexpr auto both_signed{std::is_signed_v<From> && std::is_signed_v<To>};
@@ -121,7 +121,7 @@ constexpr auto checked_cast(From value) noexcept -> To {
   return converted_value;
 }
 
-template <trivially_copyable T> [[nodiscard]] CUDA_CALLABLE
+template <trivially_copyable T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto checked_bytes(std::size_t count) noexcept -> std::size_t {
   const auto byte_count{checked_mul(count, sizeof(T))};
 

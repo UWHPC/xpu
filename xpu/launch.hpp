@@ -93,12 +93,12 @@ inline auto blocks_for(Kernel kernel, unsigned int threads, std::size_t size) ->
 
 } // namespace xpu::detail
 
-[[nodiscard]] DEVICE_ONLY
+[[nodiscard]] XPU_DEVICE_ONLY
 inline auto linear_index() noexcept -> std::size_t {
   return static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
 }
 
-[[nodiscard]] DEVICE_ONLY
+[[nodiscard]] XPU_DEVICE_ONLY
 inline auto linear_stride() noexcept -> std::size_t {
   return static_cast<std::size_t>(gridDim.x) * blockDim.x;
 }
@@ -110,7 +110,7 @@ template <> struct Coord<3> { std::size_t x{}, y{}, z{}; };
 
 template <int Dims> __device__ [[nodiscard]]
 inline auto global_index() noexcept -> Coord<Dims> {
-  auto id = Coord<Dims>{};
+  auto id{Coord<Dims>{}};
   
   if constexpr (Dims >= 1) {
     id.x = static_cast<std::size_t>(blockDim.x) * blockIdx.x + threadIdx.x;
@@ -133,7 +133,7 @@ inline constexpr auto block_per_dim(std::size_t size, unsigned int dim_threads) 
 
 template <int Dims> __device__ [[nodiscard]]
 inline auto global_stride() noexcept -> Coord<Dims> {
-  auto stride = Coord<Dims>{};
+  auto stride{Coord<Dims>{}};
   
   if constexpr (Dims >= 1) {
     stride.x = static_cast<std::size_t>(blockDim.x) * gridDim.x;
@@ -187,13 +187,13 @@ inline constexpr auto num_itrs(
   return total;
 }
 
-template <std::size_t dims> CUDA_CALLABLE
+template <std::size_t dims> XPU_CUDA_CALLABLE
 inline constexpr auto itr_index(
   const xpu::range<dims>& range,
   std::size_t linear
 ) noexcept -> xpu::array<std::size_t, dims> {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
-  auto index = xpu::array<std::size_t, dims>{};
+  auto index{xpu::array<std::size_t, dims>{}};
 
   for (auto d{dims}; d-- > 1uz;) {
     const auto delta{range.end[d] - range.begin[d]};
@@ -222,7 +222,7 @@ struct reduction_contribution {
   xpu::range<dims> range;
   F contribution;
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   auto operator()(std::size_t linear) const -> T {
     const auto index{xpu::detail::itr_index(range, linear)};
     const auto value{T{contribution(index)}};
@@ -239,9 +239,9 @@ inline auto reduction_input(
 ) {
   using function_t = std::decay_t<F>;
 
-  const auto transform = reduction_contribution<dims, T, function_t>{
+  const auto transform{reduction_contribution<dims, T, function_t>{
     range, function_t{std::forward<F>(contribution)}
-  };
+  }};
 
   const auto indices{thrust::counting_iterator<std::size_t>{0uz}};
   const auto input{thrust::make_transform_iterator(indices, transform)};
@@ -265,7 +265,7 @@ struct parallel_for_function {
   xpu::range<dims> range;
   F fcn;
 
-  DEVICE_ONLY
+  XPU_DEVICE_ONLY
   auto operator()(std::size_t linear) -> void {
     const auto index{xpu::detail::itr_index(range, linear)};
 
@@ -274,25 +274,118 @@ struct parallel_for_function {
 };
 #endif
 
+#if !defined(XPU_CUDA)
+template <bool dense, std::size_t dimension, std::size_t dims>
+inline auto parallel_for_coordinate(
+  const xpu::range<dims>& range,
+  std::size_t iteration
+) -> std::size_t {
+  if constexpr (dense) {
+    return iteration;
+  } else {
+    return range.begin[dimension] + iteration * range.step[dimension];
+  }
+}
+
+template <bool dense, std::size_t dims, typename F, typename... Coordinates>
+XPU_FORCE_INLINE auto parallel_for_nested(
+  const xpu::range<dims>& range,
+  const xpu::array<std::size_t, dims>& counts,
+  F& fcn,
+  Coordinates... outer
+) -> void {
+  constexpr auto dimension{sizeof...(Coordinates)};
+
+  if constexpr (dimension == dims) {
+    fcn(xpu::array<std::size_t, dims>{outer...});
+  } else if constexpr (dimension + 1uz == dims) {
+    #pragma omp simd
+    for (auto iteration = 0uz; iteration < counts[dimension]; ++iteration) {
+      parallel_for_nested<dense>(
+        range, counts, fcn, outer..., parallel_for_coordinate<dense, dimension>(range, iteration)
+      );
+    }
+  } else {
+    for (auto iteration{0uz}; iteration < counts[dimension]; ++iteration) {
+      parallel_for_nested<dense>(
+        range, counts, fcn, outer..., parallel_for_coordinate<dense, dimension>(range, iteration)
+      );
+    }
+  }
+}
+
+template <bool dense, std::size_t dims, typename F>
+inline auto parallel_for_cpu(
+  const xpu::range<dims>& range,
+  const xpu::array<std::size_t, dims> counts,
+  F& fcn
+) -> void {
+  if constexpr (!std::is_copy_constructible_v<F>) {
+    auto shared{[&fcn](auto&& index) {
+      fcn(std::forward<decltype(index)>(index));
+    }};
+
+    parallel_for_cpu<dense>(range, counts, shared);
+  } else if constexpr (dims == 1uz) {
+    #pragma omp parallel for simd firstprivate(counts, fcn)
+    for (auto iteration = 0uz; iteration < counts[0]; ++iteration) {
+      parallel_for_nested<dense>(
+        range, counts, fcn, parallel_for_coordinate<dense, 0uz>(range, iteration)
+      );
+    }
+  } else {
+    #pragma omp parallel for firstprivate(counts, fcn)
+    for (auto iteration = 0uz; iteration < counts[0]; ++iteration) {
+      parallel_for_nested<dense>(
+        range, counts, fcn, parallel_for_coordinate<dense, 0uz>(range, iteration)
+      );
+    }
+  }
+}
+#endif
+
 template <std::size_t dims, typename F>
 inline auto parallel_for_impl(
   const xpu::range<dims>& range,
-  std::size_t total,
   F&& fcn
 ) -> void {
 #if defined(XPU_CUDA)
+  const auto total{xpu::detail::num_itrs(range)};
+  if (total == 0uz) { return; }
+
   using function_t = std::decay_t<F>;
 
-  const auto operation = parallel_for_function<dims, function_t>{
+  const auto operation{parallel_for_function<dims, function_t>{
     range,
     function_t{std::forward<F>(fcn)}
-  };
+  }};
 
   xpu::cu_check(cub::DeviceFor::Bulk(total, operation));
 #else
-  #pragma omp parallel for
-  for (auto linear = 0uz; linear < total; ++linear) {
-    fcn(xpu::detail::itr_index(range, linear));
+  auto dense{true};
+  for (auto dimension{0uz}; dimension < dims; ++dimension) {
+    const auto empty_dimension{range.step[dimension] == 0uz || range.begin[dimension] >= range.end[dimension]};
+    if (empty_dimension) { return; }
+
+    dense = dense && range.begin[dimension] == 0uz && range.step[dimension] == 1uz;
+  }
+
+  auto counts{range.end};
+  auto total{1uz};
+
+  for (auto dimension{0uz}; dimension < dims; ++dimension) {
+    if (!dense) {
+      const auto delta{range.end[dimension] - range.begin[dimension]};
+      counts[dimension] = xpu::ceiling_div(delta, range.step[dimension]);
+    }
+
+    total = xpu::detail::checked_mul(total, counts[dimension]);
+  }
+
+  if (dense) {
+    parallel_for_cpu<true>(range, counts, fcn);
+  } else {
+    parallel_for_cpu<false>(range, counts, fcn);
   }
 #endif
 }
@@ -308,9 +401,9 @@ inline auto parallel_reduce_sum_impl(
 ) -> void {
   using function_t = std::decay_t<F>;
 
-  const auto transform = reduction_contribution<dims, T, function_t>{
+  const auto transform{reduction_contribution<dims, T, function_t>{
     range, function_t{std::forward<F>(contribution)}
-  };
+  }};
 
 #if defined(XPU_CUDA)
   const auto indices{thrust::counting_iterator<std::size_t>{0uz}};
@@ -351,10 +444,7 @@ inline auto parallel_for(
 ) -> void {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
 
-  const auto total{xpu::detail::num_itrs(range)};
-  if (total == 0uz) { return; }
-
-  detail::parallel_for_impl(range, total, std::forward<F>(fcn));
+  detail::parallel_for_impl(range, std::forward<F>(fcn));
 }
 
 template <arithmetic T, std::size_t dims, typename F>

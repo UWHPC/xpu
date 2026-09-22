@@ -21,7 +21,7 @@ private:
   std::size_t count_;
 
 public:
-  CUDA_CALLABLE
+  XPU_CUDA_CALLABLE
   explicit constexpr soa_view(T* base, std::size_t count) noexcept
     : base_{base}
     , count_{count}
@@ -30,17 +30,17 @@ public:
     static_cast<void>(xpu::detail::checked_bytes<T>(storage_count));
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto count() const noexcept -> std::size_t {
     return count_;
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto stride() const noexcept -> std::size_t {
     return xpu::handle_pad<T>(count_);
   }
 
-  template <typename Self> [[nodiscard]] CUDA_CALLABLE
+  template <typename Self> [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto operator[](this Self&& self, std::size_t arr_idx) noexcept {
     assert(arr_idx < exposed_arrays);
 
@@ -54,7 +54,7 @@ public:
     );
   }
 
-  template <typename Self> [[nodiscard]] CUDA_CALLABLE
+  template <typename Self> [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto pointers(this Self&& self) noexcept {
     auto ptrs{xpu::array<decltype(self[0uz]), exposed_arrays>{}};
 
@@ -77,7 +77,7 @@ private:
   std::size_t count_;
 
 public:
-  CUDA_CALLABLE
+  XPU_CUDA_CALLABLE
   explicit constexpr soa_batch_view(
     T* base,
     std::size_t batches,
@@ -88,27 +88,27 @@ public:
     , count_{count}
   { }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto batch_count() const noexcept -> std::size_t {
     return batches_;
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto element_count() const noexcept -> std::size_t {
     return count_;
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto array_stride() const noexcept -> std::size_t {
     return xpu::handle_pad<T>(count_);
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto batch_stride() const noexcept -> std::size_t {
     return storage_arrays * array_stride();
   }
 
-  template <typename Self> [[nodiscard]] CUDA_CALLABLE
+  template <typename Self> [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto view(this Self&& self, std::size_t batch) noexcept {
     assert(batch < self.batches_);
 
@@ -214,32 +214,32 @@ public:
       }
   { }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto batch_count() const noexcept -> std::size_t {
     return batches_;
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto element_count() const noexcept -> std::size_t {
     return count_;
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto logical_count() const noexcept -> std::size_t {
     return num_arrays * element_count() * batch_count();
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto array_stride() const noexcept -> std::size_t {
     return xpu::handle_pad<T>(count_);
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto batch_stride() const noexcept -> std::size_t {
     return num_arrays * array_stride();
   }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto storage_size() const noexcept -> std::size_t {
     return batch_stride() * batch_count();
   }

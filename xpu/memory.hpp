@@ -15,7 +15,7 @@ inline constexpr auto default_align{(xpu::alignment_bytes > alignof(T)) ? xpu::a
 template <typename T>
 inline constexpr auto is_padded{sizeof(T) < xpu::alignment_bytes};
 
-template <typename T> [[nodiscard]] CUDA_CALLABLE
+template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
   static_assert(std::is_trivially_copyable_v<T>, "ERROR: xpu::bytes requires a trivially copyable type");
   const auto byte_count{xpu::detail::checked_bytes<T>(count)};
@@ -23,7 +23,7 @@ inline constexpr auto bytes(std::size_t count) noexcept -> std::size_t {
   return byte_count;
 }
 
-template <typename T> [[nodiscard]] CUDA_CALLABLE
+template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline constexpr auto handle_pad(std::size_t unpadded) noexcept -> std::size_t {
   if constexpr (is_padded<T>) {
     constexpr auto lanes{xpu::alignment_bytes / sizeof(T)};
@@ -84,14 +84,14 @@ using unique_ptr = std::unique_ptr<T[], xpu::deleter<T>>;
 
 template <typename T>
 auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
-  auto* RESTRICT ptr{xpu::alloc<T>(count)};
+  auto* XPU_RESTRICT ptr{xpu::alloc<T>(count)};
 
   xpu::fill_n(ptr, count, value);
 
   return xpu::unique_ptr<T>{ptr};
 }
 
-template <typename T> [[nodiscard]] CUDA_CALLABLE
+template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto assume_aligned(T* ptr) noexcept -> T* {
   if constexpr (is_padded<T>) {
     return std::assume_aligned<default_align<T>>(ptr);
@@ -101,7 +101,7 @@ constexpr auto assume_aligned(T* ptr) noexcept -> T* {
 }
 
 inline auto memset(
-  void* RESTRICT dst,
+  void* XPU_RESTRICT dst,
   int value,
   std::size_t bytes
 ) noexcept -> void {
@@ -115,8 +115,8 @@ inline auto memset(
 }
 
 inline auto memcpy(
-  void* RESTRICT dst,
-  const void* RESTRICT src,
+  void* XPU_RESTRICT dst,
+  const void* XPU_RESTRICT src,
   std::size_t bytes
 ) noexcept -> void {
   if (bytes == 0uz) { return; }
@@ -130,8 +130,8 @@ inline auto memcpy(
 
 template <typename T>
 inline auto copy_n(
-  T* RESTRICT dst,
-  const T* RESTRICT src,
+  T* XPU_RESTRICT dst,
+  const T* XPU_RESTRICT src,
   std::size_t count
 ) noexcept -> void {
   static_assert(
@@ -146,7 +146,7 @@ inline auto copy_n(
 
 template <typename T>
 inline auto zero_n(
-  T* RESTRICT dst,
+  T* XPU_RESTRICT dst,
   std::size_t count
 ) noexcept -> void {
   static_assert(

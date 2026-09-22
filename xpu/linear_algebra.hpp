@@ -47,7 +47,7 @@ struct build_identity {
   T* matrix;
   std::size_t stride;
 
-  DEVICE_ONLY
+  XPU_DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 2uz>& index) const -> void {
     const auto row{index[0]};
     const auto column{index[1]};
@@ -65,7 +65,7 @@ struct transpose_square {
   T* matrix;
   std::size_t stride;
 
-  DEVICE_ONLY
+  XPU_DEVICE_ONLY
   auto operator()(const xpu::array<std::size_t, 2uz>& index) const -> void {
     const auto row{index[0]};
     const auto column{index[1]};
@@ -296,8 +296,8 @@ inline auto cusolver_potrs(
 
 template <supported_float T>
 inline auto lapacke_getrf(
-  T* RESTRICT matrix,
-  lapack_int* RESTRICT pivot,
+  T* XPU_RESTRICT matrix,
+  lapack_int* XPU_RESTRICT pivot,
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
@@ -323,7 +323,7 @@ inline auto lapacke_getrf(
 
 template <supported_float T>
 inline auto lapacke_potrf(
-  T* RESTRICT matrix,
+  T* XPU_RESTRICT matrix,
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
@@ -347,8 +347,8 @@ inline auto lapacke_potrf(
 
 template <supported_float T>
 inline auto lapacke_getri(
-  T* RESTRICT inverse,
-  const lapack_int* RESTRICT pivot,
+  T* XPU_RESTRICT inverse,
+  const lapack_int* XPU_RESTRICT pivot,
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
@@ -374,9 +374,9 @@ inline auto lapacke_getri(
 
 template <supported_float T>
 inline auto lapacke_getrs(
-  const T* RESTRICT lower_upper,
-  const lapack_int* RESTRICT pivot,
-  T* RESTRICT solution,
+  const T* XPU_RESTRICT lower_upper,
+  const lapack_int* XPU_RESTRICT pivot,
+  T* XPU_RESTRICT solution,
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
@@ -404,8 +404,8 @@ inline auto lapacke_getrs(
 
 template <supported_float T>
 inline auto lapacke_potrs(
-  const T* RESTRICT lower_upper,
-  T* RESTRICT solution,
+  const T* XPU_RESTRICT lower_upper,
+  T* XPU_RESTRICT solution,
   std::size_t order,
   std::size_t stride
 ) -> lapack_int {
@@ -435,7 +435,7 @@ inline auto lapacke_potrs(
 
 template <supported_float T>
 inline auto transpose_square(
-  T* RESTRICT matrix,
+  T* XPU_RESTRICT matrix,
   std::size_t order,
   std::size_t stride
 ) noexcept -> void {
@@ -549,7 +549,7 @@ public:
   }
 
   [[nodiscard]]
-  auto factorize(T* RESTRICT matrix) noexcept -> status {
+  auto factorize(T* XPU_RESTRICT matrix) noexcept -> status {
     factor_ = nullptr;
 
 #if defined(XPU_CUDA)
@@ -579,9 +579,9 @@ public:
   }
 
   auto solve(
-    const T* RESTRICT factor,
-    const T* RESTRICT rhs,
-    T* RESTRICT solution
+    const T* XPU_RESTRICT factor,
+    const T* XPU_RESTRICT rhs,
+    T* XPU_RESTRICT solution
   ) noexcept -> void {
     if (!factor_) {
       detail::linalg_error("you must factor before you solve");
@@ -697,7 +697,7 @@ public:
   }
 
   [[nodiscard]]
-  auto factorize(T* RESTRICT matrix) noexcept -> status {
+  auto factorize(T* XPU_RESTRICT matrix) noexcept -> status {
     lower_upper_ = nullptr;
 
 #if defined(XPU_CUDA)
@@ -729,9 +729,9 @@ public:
   }
 
   auto solve(
-    const T* RESTRICT lower_upper,
-    const T* RESTRICT rhs,
-    T* RESTRICT solution
+    const T* XPU_RESTRICT lower_upper,
+    const T* XPU_RESTRICT rhs,
+    T* XPU_RESTRICT solution
   ) noexcept -> void {
     if (lower_upper != lower_upper_) {
       detail::linalg_error(
@@ -773,8 +773,8 @@ public:
   }
 
   auto invert(
-    const T* RESTRICT lower_upper,
-    T* RESTRICT inverse
+    const T* XPU_RESTRICT lower_upper,
+    T* XPU_RESTRICT inverse
   ) noexcept -> void {
     if (lower_upper != lower_upper_) {
       detail::linalg_error(

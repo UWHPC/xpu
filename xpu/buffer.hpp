@@ -17,18 +17,18 @@ private:
   std::size_t count_;
 
 public:
-  CUDA_CALLABLE
+  XPU_CUDA_CALLABLE
   explicit constexpr buffer_view(T* base, std::size_t count) noexcept
     : data_{base}
     , count_{count}
   { }
 
-  [[nodiscard]] CUDA_CALLABLE
+  [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto count() const noexcept -> std::size_t {
     return count_;
   }
 
-  template <typename Self> [[nodiscard]] CUDA_CALLABLE
+  template <typename Self> [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto& operator[](this Self&& self, std::size_t idx) noexcept {
     assert(idx < self.count_);
 

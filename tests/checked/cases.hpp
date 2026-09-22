@@ -11,7 +11,7 @@
 #include <limits>
 
 struct unexpected_iteration {
-  template <typename Index> CUDA_CALLABLE
+  template <typename Index> XPU_CUDA_CALLABLE
   auto operator()(const Index&) const -> void {
     xpu::detail::checked_error("invalid or empty range invoked its callback");
   }
@@ -97,6 +97,23 @@ inline auto run_checked_cases() -> int {
 
     return failure;
   }
+
+#if !defined(XPU_CUDA)
+  if (const auto failure{test::check_abort([] {
+    const auto range = xpu::range<2uz>{
+      {0uz, 0uz},
+      {std::numeric_limits<std::size_t>::max(), 3uz},
+      {2uz, 1uz}
+    };
+
+    // Reaching the callback must fail the death test: validation must abort
+    // before starting any iteration, rather than the callback aborting later.
+    xpu::parallel_for(range, [](const auto&) { _exit(0); });
+  })}; failure) {
+
+    return failure;
+  }
+#endif
 
   if (const auto failure{test::check_abort([] {
     static_cast<void>(xpu::detail::checked_mul(std::uint8_t{16}, std::uint8_t{16}));
