@@ -7,6 +7,7 @@
 #include <xpu/memory.hpp>
 
 #include <array>
+#include <limits>
 
 template <typename T>
 struct sum_values {
@@ -139,8 +140,27 @@ inline auto check_coordinate_sum(const xpu::range<dims>& range, int expected) ->
 }
 
 inline auto run_sum_cases() -> int {
-  const auto line = xpu::range<1uz>{{3uz}, {10uz}, {2uz}};
-  const auto volume = xpu::range<3uz>{{1uz, 2uz, 3uz}, {4uz, 7uz, 8uz}, {2uz, 3uz, 2uz}};
+  const xpu::range<1uz> line{{3uz}, {10uz}, {2uz}};
+  const xpu::range<1uz> long_line{{0uz}, {8193uz}, {1uz}};
+  const xpu::range<1uz> long_stepped_line{{1uz}, {16386uz}, {2uz}};
+  const xpu::range<3uz> volume{{1uz, 2uz, 3uz}, {4uz, 7uz, 8uz}, {2uz, 3uz, 2uz}};
+  const xpu::range<2uz> square{{0uz, 0uz}, {17uz, 31uz}, {1uz, 1uz}};
+  const xpu::range<2uz> large_square{{0uz, 0uz}, {64uz, 64uz}, {1uz, 1uz}};
+  const xpu::range<4uz> dense_four{
+    {0uz, 0uz, 0uz, 0uz}, {2uz, 3uz, 5uz, 7uz}, {1uz, 1uz, 1uz, 1uz}
+  };
+  const xpu::range<4uz> stepped_four{
+    {1uz, 2uz, 3uz, 4uz}, {5uz, 11uz, 9uz, 13uz}, {2uz, 3uz, 3uz, 3uz}
+  };
+  const xpu::range<2uz> thin_square{{0uz, 0uz}, {1uz, 20000uz}, {1uz, 1uz}};
+  const xpu::range<3uz> thin_volume{{0uz, 0uz, 0uz}, {3uz, 5uz, 9000uz}, {1uz, 1uz, 1uz}};
+  const xpu::range<3uz> thin_stepped_volume{{1uz, 0uz, 3uz}, {3uz, 2uz, 30000uz}, {1uz, 1uz, 3uz}};
+  const xpu::range<3uz> middle_split{{0uz, 0uz, 0uz}, {4uz, 300uz, 40uz}, {1uz, 1uz, 1uz}};
+  const xpu::range<3uz> empty_later{
+    {0uz, 0uz, 0uz},
+    {std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max(), 0uz},
+    {1uz, 1uz, 1uz}
+  };
 
   if (const auto failure{check_coordinate_sum(line, 24)}; failure) {
 
@@ -148,6 +168,61 @@ inline auto run_sum_cases() -> int {
   }
 
   if (const auto failure{check_coordinate_sum(volume, 126)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(long_line, 33558528)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(long_stepped_line, 67125249)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(square, 12121)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(large_square, 258048)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(dense_four, 1365)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(stepped_four, 666)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(thin_square, 199990000)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(thin_volume, 607837500)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(thin_stepped_volume, 600019992)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(middle_split, 8184000)}; failure) {
+
+    return failure;
+  }
+
+  if (const auto failure{check_coordinate_sum(empty_later, 0)}; failure) {
 
     return failure;
   }

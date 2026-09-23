@@ -220,9 +220,9 @@ shared `cases.hpp`. Common test support lives in `tests/support`, umbrella-heade
 coverage lives in `tests/integration`, and every exported header also gets a
 compile-only self-containment check.
 
-GitHub Actions runs the CPU suite on Ubuntu 24.04. CUDA runtime testing is
-enabled when the repository variable `XPU_CUDA_CI` is `true` and a self-hosted
-Linux x64 runner with the `gpu` label is available.
+GitHub Actions runs the CPU suite on Ubuntu 26.04 with GCC 15. CUDA runtime
+testing is enabled when the repository variable `XPU_CUDA_CI` is `true` and a
+self-hosted Linux x64 runner with the `gpu` label is available.
 
 ## Current limitations
 

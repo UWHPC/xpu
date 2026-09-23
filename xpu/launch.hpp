@@ -390,6 +390,87 @@ inline auto parallel_for_impl(
 #endif
 }
 
+#if !defined(XPU_CUDA)
+template <bool unit_step, std::size_t dims, arithmetic T, typename F, typename... Coordinates>
+XPU_FORCE_INLINE auto parallel_reduce_nested(
+  const xpu::range<dims>& range,
+  const xpu::array<std::size_t, dims>& counts,
+  const F& contribution,
+  T& total_sum,
+  Coordinates... outer
+) -> void {
+  constexpr auto dimension{sizeof...(Coordinates)};
+
+  if constexpr (dimension + 1uz == dims) {
+    // GCC won't vectorize an omp simd body that constructs the index array itself
+    const auto step{unit_step ? 1uz : range.step[dimension]};
+    const auto contribution_at{[&](std::size_t iteration) {
+      return contribution(xpu::array<std::size_t, dims>{
+        outer..., range.begin[dimension] + iteration * step
+      });
+    }};
+
+    #pragma omp simd reduction(+ : total_sum)
+    for (auto iteration = 0uz; iteration < counts[dimension]; ++iteration) {
+      total_sum += contribution_at(iteration);
+    }
+  } else {
+    for (auto iteration{0uz}; iteration < counts[dimension]; ++iteration) {
+      parallel_reduce_nested<unit_step>(
+        range, counts, contribution, total_sum, outer...,
+        parallel_for_coordinate<false, dimension>(range, iteration)
+      );
+    }
+  }
+}
+
+template <bool unit_step, arithmetic T, std::size_t dims, typename F> [[nodiscard]]
+inline auto parallel_reduce_cpu(
+  const xpu::range<dims>& range,
+  std::size_t total,
+  const F& contribution
+) -> T {
+  constexpr auto grain{8192uz};
+  auto counts{range.end};
+
+  for (auto dimension{0uz}; dimension < dims; ++dimension) {
+    const auto delta{range.end[dimension] - range.begin[dimension]};
+    counts[dimension] = xpu::ceiling_div(delta, range.step[dimension]);
+  }
+
+  // boxes of ~grain iterations: dims before split fixed, split blocked, dims after split whole
+  auto split{0uz}, outer{1uz}, inner{total / counts[0]};
+  for (; inner > grain; inner /= counts[++split]) {
+    outer *= counts[split];
+  }
+
+  const auto block{xpu::min(counts[split], xpu::max(grain / inner, 1uz))};
+  const auto blocks{xpu::ceiling_div(counts[split], block)};
+  const auto boxes{outer * blocks};
+  auto total_sum{T{}};
+
+  #pragma omp parallel for reduction(+ : total_sum) firstprivate(contribution) if(boxes > 1uz)
+  for (auto box = 0uz; box < boxes; ++box) {
+    auto box_range{range};
+    auto box_counts{counts};
+    const auto first{box % blocks * block};
+
+    box_range.begin[split] += first * range.step[split];
+    box_counts[split] = xpu::min(block, counts[split] - first);
+
+    for (auto dimension{split}, rest{box / blocks}; dimension-- > 0uz;) {
+      box_range.begin[dimension] += rest % counts[dimension] * range.step[dimension];
+      box_counts[dimension] = 1uz;
+      rest /= counts[dimension];
+    }
+
+    parallel_reduce_nested<unit_step>(box_range, box_counts, contribution, total_sum);
+  }
+
+  return total_sum;
+}
+#endif
+
 template <std::size_t dims, arithmetic T, typename F>
 inline auto parallel_reduce_sum_impl(
   const xpu::range<dims>& range,
@@ -399,13 +480,13 @@ inline auto parallel_reduce_sum_impl(
   [[maybe_unused]] void* scratch = nullptr,
   [[maybe_unused]] std::size_t scratch_bytes = 0uz
 ) -> void {
+#if defined(XPU_CUDA)
   using function_t = std::decay_t<F>;
 
   const auto transform{reduction_contribution<dims, T, function_t>{
     range, function_t{std::forward<F>(contribution)}
   }};
 
-#if defined(XPU_CUDA)
   const auto indices{thrust::counting_iterator<std::size_t>{0uz}};
   const auto input{thrust::make_transform_iterator(indices, transform)};
 
@@ -424,14 +505,11 @@ inline auto parallel_reduce_sum_impl(
     scratch, scratch_bytes, input, output_ptr, count
   ));
 #else
-  auto total_sum{T{}};
-
-  #pragma omp parallel for reduction(+ : total_sum)
-  for (auto linear = 0uz; linear < total; ++linear) {
-    total_sum += transform(linear);
+  if (range.step[dims - 1uz] == 1uz) {
+    *output_ptr = parallel_reduce_cpu<true, T>(range, total, contribution);
+  } else {
+    *output_ptr = parallel_reduce_cpu<false, T>(range, total, contribution);
   }
-
-  *output_ptr = total_sum;
 #endif
 }
 
