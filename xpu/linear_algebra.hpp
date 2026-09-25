@@ -191,20 +191,19 @@ inline auto cusolver_potrf(
   std::size_t order,
   std::size_t stride,
   T* matrix,
-  T* workspace,
-  std::size_t workspace_size,
+  xpu::buffer<T>& workspace,
   int* info
 ) -> void {
   const auto vendor_order{xpu::detail::checked_cast<int>(order)};
   const auto vendor_stride{xpu::detail::checked_cast<int>(stride)};
-  const auto vendor_workspace_size{xpu::detail::checked_cast<int>(workspace_size)};
+  const auto vendor_workspace_size{xpu::detail::checked_cast<int>(workspace.count())};
 
   if constexpr (std::same_as<T, float>) {
     xpu::cu_check(cusolverDnSpotrf(
       handle, CUBLAS_FILL_MODE_UPPER,
       vendor_order,
       matrix, vendor_stride,
-      workspace, vendor_workspace_size,
+      workspace.data(), vendor_workspace_size,
       info
     ));
   } else {
@@ -212,7 +211,7 @@ inline auto cusolver_potrf(
       handle, CUBLAS_FILL_MODE_UPPER,
       vendor_order,
       matrix, vendor_stride,
-      workspace, vendor_workspace_size,
+      workspace.data(), vendor_workspace_size,
       info
     ));
   }
@@ -555,7 +554,7 @@ public:
 #if defined(XPU_CUDA)
     detail::cusolver_potrf(
       handle_, order_, stride_,
-      matrix, workspace_.data(), workspace_.size(), info_.data()
+      matrix, workspace_, info_.data()
     );
 
     auto info{0};
