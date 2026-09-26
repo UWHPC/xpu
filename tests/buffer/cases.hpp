@@ -15,7 +15,8 @@ inline constexpr auto buffer_view_constant_case() -> bool {
   auto view{xpu::buffer_view<int>{values, 3uz}};
   view[1uz] = 7;
   const auto readonly{xpu::buffer_view<const int>{values, 3uz}};
-  return view.count() == 3uz && values[1] == 7 && readonly[1uz] == 7;
+  return view.count() == 3uz && values[1] == 7 && readonly[1uz] == 7 &&
+         view.data() == values && readonly.data() == values;
 }
 
 inline auto run_buffer_view_cases() -> int {
@@ -31,16 +32,19 @@ inline auto run_buffer_view_cases() -> int {
   static_assert(std::is_same_v<decltype(std::as_const(view)[0uz]), const int&>);
   static_assert(std::is_same_v<decltype(readonly[0uz]), const int&>);
   static_assert(std::is_same_v<decltype(std::move(view)[0uz]), int&>);
+  static_assert(std::is_same_v<decltype(view.data()), int*>);
+  static_assert(std::is_same_v<decltype(std::as_const(view).data()), const int*>);
+  static_assert(std::is_same_v<decltype(readonly.data()), const int*>);
 
   copy[1uz] = 9;
-  if (view.count() != 2uz || &view[0uz] != values + 1 ||
+  if (view.count() != 2uz || view.data() != values + 1 || &view[0uz] != values + 1 ||
       values[2] != 9 || readonly[1uz] != 9 || values[0] != 1 || values[3] != 4) {
     return test::fail("buffer view does not refer to the supplied storage");
   }
 
   const xpu::buffer_view<int> empty{nullptr, 0uz};
-  if (empty.count() != 0uz) {
-    return test::fail("empty buffer view count is incorrect");
+  if (empty.count() != 0uz || empty.data() != nullptr) {
+    return test::fail("empty buffer view state is incorrect");
   }
 
   return 0;
@@ -59,6 +63,9 @@ inline int run_buffer_cases() {
 
   if (view.count() != values.count() || readonly.count() != values.count()) {
     return test::fail("buffer owner view count is incorrect");
+  }
+  if (view.data() != values.data() || readonly.data() != values.data()) {
+    return test::fail("buffer owner view data pointer is incorrect");
   }
 
   if (values.count() != test::count) {
