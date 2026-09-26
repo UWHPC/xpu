@@ -555,7 +555,7 @@ public:
 #if defined(XPU_CUDA)
     detail::cusolver_potrf(
       handle_, order_, stride_,
-      matrix, workspace_.data(), workspace_.size(), info_.data()
+      matrix, workspace_.data(), workspace_.count(), info_.data()
     );
 
     auto info{0};
