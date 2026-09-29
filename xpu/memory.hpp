@@ -7,6 +7,10 @@
 #include <memory>
 #include <type_traits>
 
+#if defined(XPU_CUDA)
+  #include <cuda/std/memory>
+#endif
+
 namespace xpu {
 
 template <typename T>
@@ -94,7 +98,7 @@ auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
 template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto assume_aligned(T* ptr) noexcept -> T* {
   if constexpr (is_padded<T>) {
-    return std::assume_aligned<default_align<T>>(ptr);
+    return xstd::assume_aligned<default_align<T>>(ptr);
   } else {
     return ptr;
   }
