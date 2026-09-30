@@ -3,6 +3,7 @@
 #include "../support/check.hpp"
 
 #include <xpu/memory.hpp>
+#include <xpu/soa.hpp>
 
 #include <memory>
 
