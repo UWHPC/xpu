@@ -29,6 +29,16 @@ public:
   }
 
   template <typename Self> [[nodiscard]] XPU_CUDA_CALLABLE
+  constexpr auto data(this Self&& self) noexcept {
+    using element_t = std::conditional_t<
+      std::is_const_v<std::remove_reference_t<Self>>,
+      const T, T
+    >;
+
+    return static_cast<element_t*>(self.data_);
+  }
+
+  template <typename Self> [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto& operator[](this Self&& self, std::size_t idx) noexcept {
     assert(idx < self.count_);
 
