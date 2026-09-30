@@ -97,11 +97,7 @@ auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
 
 template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
 constexpr auto assume_aligned(T* ptr) noexcept -> T* {
-  if constexpr (is_padded<T>) {
-    return xstd::assume_aligned<default_align<T>>(ptr);
-  } else {
-    return ptr;
-  }
+  return xstd::assume_aligned<default_align<T>>(ptr);
 }
 
 inline auto memset(
