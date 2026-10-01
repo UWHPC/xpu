@@ -15,13 +15,21 @@
   #include <cuda/std/array>
   #include <thrust/iterator/counting_iterator.h>
   #include <thrust/iterator/transform_iterator.h>
+#elif defined(XPU_HIP)
+  // hipCUB's C++23 path names std::extents without including <mdspan>
+  #include <mdspan>
+  #include <array>
+  #include <hipcub/device/device_for.hpp>
+  #include <hipcub/device/device_reduce.hpp>
+  #include <rocprim/iterator/counting_iterator.hpp>
+  #include <rocprim/iterator/transform_iterator.hpp>
 #else
   #include <array>
 #endif
 
 namespace xpu {
 
-#if defined(XPU_CUDA) && defined(__CUDACC__)
+#if defined(XPU_GPU)
 
 namespace detail {
 
@@ -29,10 +37,17 @@ namespace detail {
 inline auto device_SMs() -> unsigned int {
   static const auto cached{[] {
       auto device{0}, sms{0};
+#if defined(XPU_CUDA)
       xpu::cu_check(cudaGetDevice(&device));
       xpu::cu_check(cudaDeviceGetAttribute(
         &sms, cudaDevAttrMultiProcessorCount, device
       ));
+#else
+      xpu::cu_check(hipGetDevice(&device));
+      xpu::cu_check(hipDeviceGetAttribute(
+        &sms, hipDeviceAttributeMultiprocessorCount, device
+      ));
+#endif
       const auto multiprocessors{xpu::detail::checked_cast<unsigned int>(sms)};
 
       return multiprocessors;
@@ -45,13 +60,22 @@ inline auto device_SMs() -> unsigned int {
 inline auto retain_default_pool() -> void {
   static const auto once{[] {
       auto device{0};
-      auto pool{cudaMemPool_t{}};
       auto threshold{std::numeric_limits<std::uint64_t>::max()};
+#if defined(XPU_CUDA)
+      auto pool{cudaMemPool_t{}};
       xpu::cu_check(cudaGetDevice(&device));
       xpu::cu_check(cudaDeviceGetDefaultMemPool(&pool, device));
       xpu::cu_check(cudaMemPoolSetAttribute(
         pool, cudaMemPoolAttrReleaseThreshold, &threshold
       ));
+#else
+      auto pool{hipMemPool_t{}};
+      xpu::cu_check(hipGetDevice(&device));
+      xpu::cu_check(hipDeviceGetDefaultMemPool(&pool, device));
+      xpu::cu_check(hipMemPoolSetAttribute(
+        pool, hipMemPoolAttrReleaseThreshold, &threshold
+      ));
+#endif
 
       return true;
     }()
@@ -67,9 +91,15 @@ inline auto wave_blocks(Kernel kernel, dim3 threads, std::size_t smem = 0uz) -> 
   )};
   auto blocks_per_SM{0};
 
+#if defined(XPU_CUDA)
   cu_check(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
     &blocks_per_SM, kernel, xpu::detail::checked_cast<int>(thread_budget), smem
   ));
+#else
+  cu_check(hipOccupancyMaxActiveBlocksPerMultiprocessor(
+    &blocks_per_SM, kernel, xpu::detail::checked_cast<int>(thread_budget), smem
+  ));
+#endif
 
   const auto blocks{xpu::detail::checked_mul(
     xpu::detail::device_SMs(),
@@ -128,7 +158,7 @@ template <> struct Coord<1> { std::size_t x{}; };
 template <> struct Coord<2> { std::size_t x{}, y{}; };
 template <> struct Coord<3> { std::size_t x{}, y{}, z{}; };
 
-template <int Dims> __device__ [[nodiscard]]
+template <int Dims> [[nodiscard]] XPU_DEVICE_ONLY
 inline auto global_index() noexcept -> Coord<Dims> {
   auto id{Coord<Dims>{}};
   
@@ -151,7 +181,7 @@ inline constexpr auto block_per_dim(std::size_t size, unsigned int dim_threads) 
   return blocks;
 }
 
-template <int Dims> __device__ [[nodiscard]]
+template <int Dims> [[nodiscard]] XPU_DEVICE_ONLY
 inline auto global_stride() noexcept -> Coord<Dims> {
   auto stride{Coord<Dims>{}};
   
@@ -229,13 +259,20 @@ inline constexpr auto itr_index(
   return index;
 }
 
+// HIP-Clang checks a requires-clause as the host caller, which rejects __device__ contributions.
+// A constexpr function is host+device there, so the call is checked from that context instead
 template <typename F, typename T, std::size_t dims>
-concept sum_contribution = requires(
-  const std::remove_reference_t<F>& contribution,
-  const xpu::array<std::size_t, dims>& index
-) {
-  { contribution(index) } -> std::same_as<T>;
-};
+inline constexpr auto is_sum_contribution() -> bool {
+  return requires(
+    const std::remove_reference_t<F>& contribution,
+    const xpu::array<std::size_t, dims>& index
+  ) {
+    { contribution(index) } -> std::same_as<T>;
+  };
+}
+
+template <typename F, typename T, std::size_t dims>
+concept sum_contribution = is_sum_contribution<F, T, dims>();
 
 template <std::size_t dims, arithmetic T, typename F>
 struct reduction_contribution {
@@ -251,7 +288,7 @@ struct reduction_contribution {
   }
 };
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
 template <arithmetic T, std::size_t dims, typename F>
 inline auto reduction_input(
   const xpu::range<dims>& range,
@@ -263,8 +300,13 @@ inline auto reduction_input(
     range, function_t{std::forward<F>(contribution)}
   }};
 
+#if defined(XPU_CUDA)
   const auto indices{thrust::counting_iterator<std::size_t>{0uz}};
   const auto input{thrust::make_transform_iterator(indices, transform)};
+#else
+  const auto indices{rocprim::counting_iterator<std::size_t>{0uz}};
+  const auto input{rocprim::make_transform_iterator(indices, transform)};
+#endif
 
   return input;
 }
@@ -283,7 +325,7 @@ struct parallel_for_function {
 };
 #endif
 
-#if !defined(XPU_CUDA)
+#if !defined(XPU_GPU)
 template <bool dense, std::size_t dimension, std::size_t dims>
 inline auto parallel_for_coordinate(
   const xpu::range<dims>& range,
@@ -358,7 +400,7 @@ inline auto parallel_for_impl(
   const xpu::range<dims>& range,
   F&& fcn
 ) -> void {
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   const auto total{xpu::detail::num_itrs(range)};
   if (total == 0uz) { return; }
 
@@ -369,7 +411,11 @@ inline auto parallel_for_impl(
     function_t{std::forward<F>(fcn)}
   }};
 
+#if defined(XPU_CUDA)
   xpu::cu_check(cub::DeviceFor::Bulk(total, operation));
+#else
+  xpu::cu_check(hipcub::DeviceFor::Bulk(total, operation));
+#endif
 #else
   auto dense{true};
   for (auto dimension{0uz}; dimension < dims; ++dimension) {
@@ -399,7 +445,7 @@ inline auto parallel_for_impl(
 #endif
 }
 
-#if !defined(XPU_CUDA)
+#if !defined(XPU_GPU)
 template <bool unit_step, std::size_t dims, arithmetic T, typename F, typename... Coordinates>
 XPU_FORCE_INLINE auto parallel_reduce_nested(
   const xpu::range<dims>& range,
@@ -487,12 +533,27 @@ inline auto parallel_reduce_sum_impl(
   T* output_ptr,
   F&& contribution
 ) -> void {
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   const auto input{reduction_input<T>(range, std::forward<F>(contribution))};
   const auto count{xpu::detail::checked_cast<std::ptrdiff_t>(total)};
 
   xpu::detail::retain_default_pool();
+#if defined(XPU_CUDA)
   xpu::cu_check(cub::DeviceReduce::Sum(input, output_ptr, count));
+#else
+  // hipCUB still needs explicit scratch; keep its lifetime on the default stream.
+  auto scratch_bytes{0uz};
+  xpu::cu_check(hipcub::DeviceReduce::Sum(
+    nullptr, scratch_bytes, input, output_ptr, count
+  ));
+
+  auto scratch{static_cast<void*>(nullptr)};
+  xpu::cu_check(hipMallocAsync(&scratch, scratch_bytes, nullptr));
+  xpu::cu_check(hipcub::DeviceReduce::Sum(
+    scratch, scratch_bytes, input, output_ptr, count
+  ));
+  xpu::cu_check(hipFreeAsync(scratch, nullptr));
+#endif
 #else
   if (range.step[dims - 1uz] == 1uz) {
     *output_ptr = parallel_reduce_cpu<true, T>(range, total, contribution);
@@ -529,6 +590,8 @@ inline auto parallel_reduce_sum(
   if (empty) {
 #if defined(XPU_CUDA)
     xpu::cu_check(cudaMemsetAsync(output_ptr, 0, sizeof(T)));
+#elif defined(XPU_HIP)
+    xpu::cu_check(hipMemsetAsync(output_ptr, 0, sizeof(T)));
 #else
     *output_ptr = T{};
 #endif

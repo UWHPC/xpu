@@ -81,7 +81,7 @@ inline constexpr auto ceiling_div(T num, T den) noexcept -> T {
 
 template <std::floating_point T> XPU_CUDA_CALLABLE
 inline auto sincos(T arg, T* XPU_RESTRICT s, T* XPU_RESTRICT c) noexcept -> void {
-#if defined(__CUDA_ARCH__)
+#if defined(XPU_DEVICE_COMPILE)
   if constexpr (std::is_same_v<T, float>) { ::sincosf(arg, s, c); }
   else { ::sincos(arg, s, c); }
 #else
@@ -91,7 +91,7 @@ inline auto sincos(T arg, T* XPU_RESTRICT s, T* XPU_RESTRICT c) noexcept -> void
 
 template <std::floating_point T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline auto rsqrt(T x) noexcept -> T {
-#if defined(__CUDA_ARCH__)
+#if defined(XPU_DEVICE_COMPILE)
   if constexpr (std::is_same_v<T, float>) { return ::rsqrtf(x); } else { return ::rsqrt(x); }
 #else
   return T{1} / xpu::sqrt(x);
@@ -100,7 +100,7 @@ inline auto rsqrt(T x) noexcept -> T {
 
 template <std::floating_point T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline auto norm3d(T x, T y, T z) noexcept -> T {
-#if defined(__CUDA_ARCH__)
+#if defined(XPU_DEVICE_COMPILE)
   if constexpr (std::is_same_v<T, float>) { return ::norm3df(x, y, z); }
   else { return ::norm3d(x, y, z); }
 #else
@@ -110,7 +110,7 @@ inline auto norm3d(T x, T y, T z) noexcept -> T {
 
 template <std::floating_point T> [[nodiscard]] XPU_CUDA_CALLABLE
 inline auto rnorm3d(T x, T y, T z) noexcept -> T {
-#if defined(__CUDA_ARCH__)
+#if defined(XPU_DEVICE_COMPILE)
   if constexpr (std::is_same_v<T, float>) { return ::rnorm3df(x, y, z); }
   else { return ::rnorm3d(x, y, z); }
 #else
@@ -120,7 +120,7 @@ inline auto rnorm3d(T x, T y, T z) noexcept -> T {
 
 template <arithmetic T> XPU_CUDA_CALLABLE
 inline auto atomic_add(T* ptr, T value) noexcept -> void {
-#if defined(__CUDA_ARCH__)
+#if defined(XPU_DEVICE_COMPILE)
   atomicAdd(ptr, value);
 #else
   std::atomic_ref<T>(*ptr).fetch_add(value, std::memory_order_relaxed);

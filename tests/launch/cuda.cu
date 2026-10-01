@@ -1,5 +1,6 @@
 #include "../support/check.hpp"
 #include "../support/aborts.hpp"
+#include "../support/device.hpp"
 
 #include <limits>
 
@@ -57,8 +58,8 @@ int main() {
   write_launch_coordinates<<<blocks, threads>>>(
     indices.data(), strides.data(), test::count
   );
-  xpu::cu_check(cudaGetLastError());
-  xpu::cu_check(cudaDeviceSynchronize());
+  test::check_launch();
+  test::synchronize();
 
   auto host_indices{std::make_unique<std::size_t[]>(test::count)};
   auto host_strides{std::make_unique<std::size_t[]>(test::count)};
@@ -67,7 +68,7 @@ int main() {
 
   for (auto i{0uz}; i < test::count; ++i) {
     if (host_indices[i] != i || host_strides[i] != expected_stride) {
-      return test::fail("CUDA launch coordinates are incorrect");
+      return test::fail("GPU launch coordinates are incorrect");
     }
   }
 

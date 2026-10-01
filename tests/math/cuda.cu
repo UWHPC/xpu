@@ -1,4 +1,5 @@
 #include "cases.hpp"
+#include "../support/device.hpp"
 
 #include <xpu/algorithm.hpp>
 #include <xpu/buffer.hpp>
@@ -47,8 +48,8 @@ int main() {
   add_under_contention<<<atomic_blocks, atomic_threads>>>(
     atomic_result.data(), atomic_add_count
   );
-  xpu::cu_check(cudaGetLastError());
-  xpu::cu_check(cudaDeviceSynchronize());
+  test::check_launch();
+  test::synchronize();
 
   auto host_atomic_result{0};
   xpu::copy_n(&host_atomic_result, atomic_result.data(), 1uz);
@@ -67,8 +68,8 @@ int main() {
   compute_inverse_norms<<<blocks, threads>>>(
     result.data(), a.data(), b.data(), result.count()
   );
-  xpu::cu_check(cudaGetLastError());
-  xpu::cu_check(cudaDeviceSynchronize());
+  test::check_launch();
+  test::synchronize();
 
   auto host_result{std::make_unique<float[]>(test::count)};
   xpu::copy_n(host_result.get(), result.data(), test::count);

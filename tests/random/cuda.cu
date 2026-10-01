@@ -1,4 +1,5 @@
 #include "cases.hpp"
+#include "../support/device.hpp"
 
 #include <xpu/buffer.hpp>
 #include <xpu/config.hpp>
@@ -30,7 +31,7 @@ int main() {
 
   auto samples{xpu::buffer<random_sample>{random_sample_count}};
   generate_random_samples<<<1u, 1u>>>(samples.data());
-  xpu::cu_check(cudaGetLastError());
+  test::check_launch();
 
   auto host_samples = std::array<random_sample, random_sample_count>{};
   xpu::copy_n(

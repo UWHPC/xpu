@@ -14,6 +14,7 @@ endif()
 project(xpu LANGUAGES CXX)
 
 option(XPU_ENABLE_CUDA "Build the CUDA backend if a CUDA compiler is available" ON)
+option(XPU_ENABLE_HIP "Build the HIP backend if a HIP compiler is available and CUDA is not used" ON)
 option(XPU_ENABLE_LINALG "Build the optional linear-algebra component" OFF)
 option(XPU_ARCH_NATIVE "Tune for the host architecture (-march=native)" ON)
 option(XPU_BUILD_TESTS "Build the xpu tests" ${PROJECT_IS_TOP_LEVEL})
@@ -64,8 +65,87 @@ if(XPU_ENABLE_CUDA)
       "xpu: CUDA ${CMAKE_CUDA_COMPILER_VERSION}, arch ${CMAKE_CUDA_ARCHITECTURES}, "
       "host ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
   else()
-    message(STATUS "xpu: no CUDA compiler found, building the CPU-only path")
+    message(STATUS "xpu: no CUDA compiler found")
   endif()
+endif()
+
+# HIP
+set(XPU_HIP OFF)
+
+if(XPU_ENABLE_HIP AND NOT XPU_CUDA)
+  include(CheckLanguage)
+  check_language(HIP)
+
+  if(CMAKE_HIP_COMPILER)
+    enable_language(HIP)
+
+    if(DEFINED CMAKE_HIP_PLATFORM AND NOT CMAKE_HIP_PLATFORM STREQUAL "amd")
+      message(FATAL_ERROR
+        "xpu's HIP backend targets AMD GPUs, but CMAKE_HIP_PLATFORM is ${CMAKE_HIP_PLATFORM}. "
+        "Use the CUDA backend on NVIDIA, or configure with -DXPU_ENABLE_HIP=OFF.")
+    endif()
+
+    set(CMAKE_HIP_EXTENSIONS OFF)
+
+    # Let the ROCm packages, and the dependencies they look up, find ROCm
+    list(APPEND CMAKE_PREFIX_PATH ${CMAKE_HIP_COMPILER_ROCM_ROOT} $ENV{ROCM_PATH} /opt/rocm)
+
+    # hip-config probes for GPUs unless GPU_TARGETS is set, so reuse CMake's list
+    if(NOT DEFINED GPU_TARGETS)
+      set(GPU_TARGETS ${CMAKE_HIP_ARCHITECTURES})
+    endif()
+
+    foreach(package IN ITEMS hip rocprim hipcub hiprand)
+      find_package(${package} CONFIG)
+
+      if(NOT ${package}_FOUND)
+        message(FATAL_ERROR
+          "xpu: found a HIP compiler but not the ROCm ${package} package. Point ROCM_PATH or "
+          "CMAKE_PREFIX_PATH at ROCm, or configure with -DXPU_ENABLE_HIP=OFF to build the CPU-only path.")
+      endif()
+    endforeach()
+
+    if(hip_VERSION VERSION_LESS 7.0)
+      message(FATAL_ERROR
+        "xpu needs ROCm 7.0 or newer for the HIP backend (found HIP ${hip_VERSION}). "
+        "Configure with -DXPU_ENABLE_HIP=OFF to build the CPU-only path.")
+    endif()
+
+    # hipCUB's C++23 path uses std::extents, which needs <mdspan> from the standard library
+    include(CheckSourceCompiles)
+    block()
+      # try_compile adds a -std of its own from the CMAKE_HIP_* standard settings after
+      # CMAKE_REQUIRED_FLAGS, so pin that one to C++23 as well
+      set(CMAKE_HIP_STANDARD 23)
+      set(CMAKE_REQUIRED_FLAGS -std=c++23)
+      set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+      check_source_compiles(HIP [=[
+#include <mdspan>
+int main() { return static_cast<int>(std::extents<int, 1>::rank()) - 1; }
+]=] XPU_HIP_HAS_MDSPAN)
+    endblock()
+
+    if(NOT XPU_HIP_HAS_MDSPAN)
+      message(FATAL_ERROR
+        "The HIP compiler's C++ standard library has no std::extents in <mdspan>, which hipCUB "
+        "needs under C++23. Install GCC 15 (ROCm's clang uses the newest GCC it finds) or use "
+        "libc++, then reconfigure in a fresh build directory.")
+    endif()
+
+    set(XPU_HIP ON)
+    message(STATUS
+      "xpu: HIP ${hip_VERSION}, arch ${CMAKE_HIP_ARCHITECTURES}, "
+      "compiler ${CMAKE_HIP_COMPILER_ID} ${CMAKE_HIP_COMPILER_VERSION}")
+  else()
+    message(STATUS "xpu: no HIP compiler found")
+  endif()
+endif()
+
+if(XPU_CUDA OR XPU_HIP)
+  set(XPU_GPU ON)
+else()
+  set(XPU_GPU OFF)
+  message(STATUS "xpu: building the CPU-only path")
 endif()
 
 # Targets
@@ -84,6 +164,16 @@ if(XPU_CUDA)
   target_link_libraries(xpu INTERFACE CUDA::cudart)
 
   target_compile_options(xpu INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:-std=c++23>)
+elseif(XPU_HIP)
+  target_compile_definitions(xpu INTERFACE XPU_HIP)
+  # hip::hipcub pulls in hip::device, whose -x hip and --offload-arch would land on every CXX
+  # source of a consumer, so take the hipCUB and rocPRIM headers without it
+  target_link_libraries(xpu INTERFACE hip::host roc::rocprim hip::hiprand)
+  target_include_directories(xpu SYSTEM INTERFACE
+    $<TARGET_PROPERTY:hip::hipcub,INTERFACE_INCLUDE_DIRECTORIES>
+  )
+
+  target_compile_options(xpu INTERFACE $<$<COMPILE_LANGUAGE:HIP>:-std=c++23>)
 else()
   find_package(OpenMP QUIET COMPONENTS CXX)
   if(OpenMP_CXX_FOUND)
@@ -103,6 +193,16 @@ if(XPU_ENABLE_LINALG)
       CUDA::cusolver
       CUDA::cublas
     )
+  elseif(XPU_HIP)
+    find_package(hipsolver CONFIG)
+
+    if(NOT hipsolver_FOUND)
+      message(FATAL_ERROR
+        "xpu: XPU_ENABLE_LINALG on the HIP backend needs the ROCm hipsolver package. "
+        "Install it, or configure with -DXPU_ENABLE_LINALG=OFF.")
+    endif()
+
+    target_link_libraries(xpu_linalg INTERFACE roc::hipsolver)
   else()
     find_package(LAPACK REQUIRED)
     find_path(XPU_LAPACKE_INCLUDE_DIR NAMES lapacke.h REQUIRED)
@@ -122,6 +222,7 @@ if(XPU_ARCH_NATIVE AND NOT MSVC)
   target_compile_options(xpu INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-march=native>
     $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-march=native>
+    $<$<COMPILE_LANGUAGE:HIP>:-march=native>
   )
 endif()
 

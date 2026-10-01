@@ -1,12 +1,30 @@
 #pragma once
 
+#if defined(XPU_CUDA) && defined(XPU_HIP)
+  #error "ERROR: XPU_CUDA and XPU_HIP cannot both be defined."
+#endif
+
 #if defined(XPU_CUDA) && !defined(__CUDACC__)
   #error "ERROR: must use nvcc when compiling with the XPU_CUDA flag."
+#endif
+
+#if defined(XPU_HIP) && !defined(__HIP__)
+  #error "ERROR: must compile as HIP when compiling with the XPU_HIP flag."
+#endif
+
+#if defined(XPU_CUDA) || defined(XPU_HIP)
+  #define XPU_GPU 1
+#endif
+
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
+  #define XPU_DEVICE_COMPILE 1
 #endif
 
 #if defined(XPU_CUDA)
   #include <cuda_runtime.h>
   #include <cuda/std/cstddef>
+#elif defined(XPU_HIP)
+  #include <hip/hip_runtime.h>
 #endif
 
 #include <cstddef>
@@ -24,7 +42,7 @@
 
 namespace xpu {
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
 
 template <typename Status>
 inline auto cu_check(
@@ -34,9 +52,16 @@ inline auto cu_check(
 ) noexcept -> void {
   if (result == success) { return; }
 
+#if defined(XPU_CUDA)
+  constexpr auto backend{"CUDA"};
+#else
+  constexpr auto backend{"HIP"};
+#endif
+
   std::fprintf(
     stderr,
-    "CUDA error at %s:%u in %s\n status code: %d\n",
+    "%s error at %s:%u in %s\n status code: %d\n",
+    backend,
     loc.file_name(),
     loc.line(),
     loc.function_name(),
@@ -56,13 +81,13 @@ inline auto cu_check(
   #define XPU_RESTRICT
 #endif
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   #define XPU_CUDA_CALLABLE __host__ __device__
 #else
   #define XPU_CUDA_CALLABLE
 #endif
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   #define XPU_DEVICE_ONLY __device__
 #else
   #define XPU_DEVICE_ONLY
@@ -101,8 +126,18 @@ inline constexpr auto xpu_cuda{
 #endif
 };
 
+inline constexpr auto xpu_hip{
+#if defined(XPU_HIP)
+  true
+#else
+  false
+#endif
+};
+
+inline constexpr auto xpu_gpu{xpu_cuda || xpu_hip};
+
 inline constexpr auto alignment_bytes{
-  xpu_cuda ? cuda_align_bytes : simd_bytes
+  xpu_gpu ? cuda_align_bytes : simd_bytes
 };
 
 } // namespace xpu

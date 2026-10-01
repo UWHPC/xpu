@@ -9,6 +9,8 @@
 #if defined(XPU_CUDA)
   #include <cublas_v2.h>
   #include <cusolverDn.h>
+#elif defined(XPU_HIP)
+  #include <hipsolver/hipsolver.h>
 #else
   #include <lapacke.h>
 #endif
@@ -17,6 +19,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <utility>
+
+// cuSOLVER and hipSOLVER share the dense API, so one GPU path calls either
+#if defined(XPU_CUDA)
+  #define XPU_SOLVER(name) cusolverDn##name
+  #define XPU_SOLVER_NAME "cuSOLVER"
+#elif defined(XPU_HIP)
+  #define XPU_SOLVER(name) hipsolverDn##name
+  #define XPU_SOLVER_NAME "hipSOLVER"
+#endif
 
 namespace xpu {
 
@@ -40,7 +51,23 @@ inline auto linalg_error(const char* message) noexcept -> void {
   std::abort();
 }
 
+#if defined(XPU_GPU)
+
 #if defined(XPU_CUDA)
+using solver_handle = cusolverDnHandle_t;
+using solver_operation = cublasOperation_t;
+
+inline constexpr auto solver_fill_upper{CUBLAS_FILL_MODE_UPPER};
+inline constexpr auto solver_op_n{CUBLAS_OP_N};
+inline constexpr auto solver_op_t{CUBLAS_OP_T};
+#else
+using solver_handle = hipsolverDnHandle_t;
+using solver_operation = hipblasOperation_t;
+
+inline constexpr auto solver_fill_upper{HIPBLAS_FILL_MODE_UPPER};
+inline constexpr auto solver_op_n{HIPBLAS_OP_N};
+inline constexpr auto solver_op_t{HIPBLAS_OP_T};
+#endif
 
 template <supported_float T>
 struct build_identity {
@@ -85,15 +112,15 @@ struct transpose_square {
   }
 };
 
-inline auto create_cusolver_handle() -> cusolverDnHandle_t {
-  auto handle{cusolverDnHandle_t{}};
-  xpu::cu_check(cusolverDnCreate(&handle));
+inline auto create_solver_handle() -> solver_handle {
+  auto handle{solver_handle{}};
+  xpu::cu_check(XPU_SOLVER(Create)(&handle));
   return handle;
 }
 
 template <supported_float T>
 inline auto getrf_workspace_size(
-  cusolverDnHandle_t handle,
+  solver_handle handle,
   std::size_t order,
   std::size_t stride
 ) -> std::size_t {
@@ -103,14 +130,14 @@ inline auto getrf_workspace_size(
   auto size{0};
 
   if constexpr (std::same_as<T, float>) {
-    xpu::cu_check(cusolverDnSgetrf_bufferSize(
+    xpu::cu_check(XPU_SOLVER(Sgetrf_bufferSize)(
       handle,
       vendor_order, vendor_order,
       nullptr, vendor_stride,
       &size
     ));
   } else {
-    xpu::cu_check(cusolverDnDgetrf_bufferSize(
+    xpu::cu_check(XPU_SOLVER(Dgetrf_bufferSize)(
       handle,
       vendor_order, vendor_order,
       nullptr, vendor_stride,
@@ -125,7 +152,7 @@ inline auto getrf_workspace_size(
 
 template <supported_float T>
 inline auto potrf_workspace_size(
-  cusolverDnHandle_t handle,
+  solver_handle handle,
   std::size_t order,
   std::size_t stride
 ) -> std::size_t {
@@ -135,15 +162,15 @@ inline auto potrf_workspace_size(
   auto size{0};
 
   if constexpr (std::same_as<T, float>) {
-    xpu::cu_check(cusolverDnSpotrf_bufferSize(
-      handle, CUBLAS_FILL_MODE_UPPER,
+    xpu::cu_check(XPU_SOLVER(Spotrf_bufferSize)(
+      handle, solver_fill_upper,
       vendor_order,
       nullptr, vendor_stride,
       &size
     ));
   } else {
-    xpu::cu_check(cusolverDnDpotrf_bufferSize(
-      handle, CUBLAS_FILL_MODE_UPPER,
+    xpu::cu_check(XPU_SOLVER(Dpotrf_bufferSize)(
+      handle, solver_fill_upper,
       vendor_order,
       nullptr, vendor_stride,
       &size
@@ -156,8 +183,8 @@ inline auto potrf_workspace_size(
 }
 
 template <supported_float T>
-inline auto cusolver_getrf(
-  cusolverDnHandle_t handle,
+inline auto solver_getrf(
+  solver_handle handle,
   std::size_t order,
   std::size_t stride,
   T* matrix,
@@ -169,14 +196,14 @@ inline auto cusolver_getrf(
   const auto vendor_stride{xpu::detail::checked_cast<int>(stride)};
 
   if constexpr (std::same_as<T, float>) {
-    xpu::cu_check(cusolverDnSgetrf(
+    xpu::cu_check(XPU_SOLVER(Sgetrf)(
       handle,
       vendor_order, vendor_order,
       matrix, vendor_stride,
       workspace, pivot, info
     ));
   } else {
-    xpu::cu_check(cusolverDnDgetrf(
+    xpu::cu_check(XPU_SOLVER(Dgetrf)(
       handle,
       vendor_order, vendor_order,
       matrix, vendor_stride,
@@ -186,8 +213,8 @@ inline auto cusolver_getrf(
 }
 
 template <supported_float T>
-inline auto cusolver_potrf(
-  cusolverDnHandle_t handle,
+inline auto solver_potrf(
+  solver_handle handle,
   std::size_t order,
   std::size_t stride,
   T* matrix,
@@ -199,16 +226,16 @@ inline auto cusolver_potrf(
   const auto vendor_workspace_size{xpu::detail::checked_cast<int>(workspace.count())};
 
   if constexpr (std::same_as<T, float>) {
-    xpu::cu_check(cusolverDnSpotrf(
-      handle, CUBLAS_FILL_MODE_UPPER,
+    xpu::cu_check(XPU_SOLVER(Spotrf)(
+      handle, solver_fill_upper,
       vendor_order,
       matrix, vendor_stride,
       workspace.data(), vendor_workspace_size,
       info
     ));
   } else {
-    xpu::cu_check(cusolverDnDpotrf(
-      handle, CUBLAS_FILL_MODE_UPPER,
+    xpu::cu_check(XPU_SOLVER(Dpotrf)(
+      handle, solver_fill_upper,
       vendor_order,
       matrix, vendor_stride,
       workspace.data(), vendor_workspace_size,
@@ -218,9 +245,9 @@ inline auto cusolver_potrf(
 }
 
 template <supported_float T>
-inline auto cusolver_getrs(
-  cusolverDnHandle_t handle,
-  cublasOperation_t operation,
+inline auto solver_getrs(
+  solver_handle handle,
+  solver_operation operation,
   std::size_t order,
   std::size_t right_hand_sides,
   const T* lower_upper,
@@ -236,7 +263,7 @@ inline auto cusolver_getrs(
   const auto vendor_solution_stride{xpu::detail::checked_cast<int>(solution_stride)};
 
   if constexpr (std::same_as<T, float>) {
-    xpu::cu_check(cusolverDnSgetrs(
+    xpu::cu_check(XPU_SOLVER(Sgetrs)(
       handle, operation,
       vendor_order, vendor_right_hand_sides,
       lower_upper, vendor_lower_upper_stride,
@@ -245,7 +272,7 @@ inline auto cusolver_getrs(
       info
     ));
   } else {
-    xpu::cu_check(cusolverDnDgetrs(
+    xpu::cu_check(XPU_SOLVER(Dgetrs)(
       handle, operation,
       vendor_order, vendor_right_hand_sides,
       lower_upper, vendor_lower_upper_stride,
@@ -257,8 +284,8 @@ inline auto cusolver_getrs(
 }
 
 template <supported_float T>
-inline auto cusolver_potrs(
-  cusolverDnHandle_t handle,
+inline auto solver_potrs(
+  solver_handle handle,
   std::size_t order,
   std::size_t right_hand_sides,
   const T* factor,
@@ -273,16 +300,16 @@ inline auto cusolver_potrs(
   const auto vendor_solution_stride{xpu::detail::checked_cast<int>(solution_stride)};
 
   if constexpr (std::same_as<T, float>) {
-    xpu::cu_check(cusolverDnSpotrs(
-      handle, CUBLAS_FILL_MODE_UPPER,
+    xpu::cu_check(XPU_SOLVER(Spotrs)(
+      handle, solver_fill_upper,
       vendor_order, vendor_right_hand_sides,
       factor, vendor_factor_stride,
       solution, vendor_solution_stride,
       info
     ));
   } else {
-    xpu::cu_check(cusolverDnDpotrs(
-      handle, CUBLAS_FILL_MODE_UPPER,
+    xpu::cu_check(XPU_SOLVER(Dpotrs)(
+      handle, solver_fill_upper,
       vendor_order, vendor_right_hand_sides,
       factor, vendor_factor_stride,
       solution, vendor_solution_stride,
@@ -455,7 +482,7 @@ inline auto transpose_square(
 
   static_cast<void>(xpu::detail::checked_bytes<T>(matrix_size));
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   const auto range = xpu::range<2uz>{
     {0uz, 0uz},
     {order, order},
@@ -490,14 +517,14 @@ private:
   std::size_t stride_;
   T* factor_{};
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   using dimension_type = int;
 #else
   using dimension_type = lapack_int;
 #endif
 
-#if defined(XPU_CUDA)
-  cusolverDnHandle_t handle_;
+#if defined(XPU_GPU)
+  detail::solver_handle handle_;
   xpu::buffer<T> workspace_;
   xpu::buffer<int> info_;
 #endif
@@ -524,16 +551,16 @@ public:
   cholesky_factorization(std::size_t order, std::size_t stride)
     : order_{checked_order(order, stride)}
     , stride_{stride}
-#if defined(XPU_CUDA)
-    , handle_{detail::create_cusolver_handle()}
+#if defined(XPU_GPU)
+    , handle_{detail::create_solver_handle()}
     , workspace_{detail::potrf_workspace_size<T>(handle_, order, stride)}
     , info_{1uz}
 #endif
   { }
 
   ~cholesky_factorization() {
-#if defined(XPU_CUDA)
-    xpu::cu_check(cusolverDnDestroy(handle_));
+#if defined(XPU_GPU)
+    xpu::cu_check(XPU_SOLVER(Destroy)(handle_));
 #endif
   }
 
@@ -551,8 +578,8 @@ public:
   auto factorize(T* XPU_RESTRICT matrix) noexcept -> status {
     factor_ = nullptr;
 
-#if defined(XPU_CUDA)
-    detail::cusolver_potrf(
+#if defined(XPU_GPU)
+    detail::solver_potrf(
       handle_, order_, stride_,
       matrix, workspace_.view(), info_.data()
     );
@@ -560,7 +587,7 @@ public:
     auto info{0};
     xpu::copy_n(&info, info_.data(), 1uz);
     if (info < 0) {
-      detail::linalg_error("cuSOLVER potrf received an invalid argument");
+      detail::linalg_error(XPU_SOLVER_NAME " potrf received an invalid argument");
     }
     if (info > 0) { return status::not_pd; }
 #else
@@ -596,8 +623,8 @@ public:
 
     xpu::copy_n(solution, rhs, order_);
 
-#if defined(XPU_CUDA)
-    detail::cusolver_potrs(
+#if defined(XPU_GPU)
+    detail::solver_potrs(
       handle_, order_, 1uz,
       factor, stride_,
       solution, order_,
@@ -607,7 +634,7 @@ public:
     auto info{0};
     xpu::copy_n(&info, info_.data(), 1uz);
     if (info != 0) {
-      detail::linalg_error("cuSOLVER potrs received an invalid argument");
+      detail::linalg_error(XPU_SOLVER_NAME " potrs received an invalid argument");
     }
 #else
     const auto info{
@@ -632,15 +659,15 @@ private:
   std::size_t stride_;
   T* lower_upper_{};
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   using dimension_type = int;
 #else
   using dimension_type = lapack_int;
 #endif
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
   xpu::buffer<int> pivot_;
-  cusolverDnHandle_t handle_;
+  detail::solver_handle handle_;
   xpu::buffer<T> workspace_;
   xpu::buffer<int> info_;
 #else
@@ -669,9 +696,9 @@ public:
   lu_factorization(std::size_t order, std::size_t stride)
     : order_{checked_order(order, stride)}
     , stride_{stride}
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
     , pivot_{order}
-    , handle_{detail::create_cusolver_handle()}
+    , handle_{detail::create_solver_handle()}
     , workspace_{detail::getrf_workspace_size<T>(handle_, order, stride)}
     , info_{1uz}
 #else
@@ -680,8 +707,8 @@ public:
   { }
 
   ~lu_factorization() {
-#if defined(XPU_CUDA)
-    xpu::cu_check(cusolverDnDestroy(handle_));
+#if defined(XPU_GPU)
+    xpu::cu_check(XPU_SOLVER(Destroy)(handle_));
 #endif
   }
 
@@ -699,8 +726,8 @@ public:
   auto factorize(T* XPU_RESTRICT matrix) noexcept -> status {
     lower_upper_ = nullptr;
 
-#if defined(XPU_CUDA)
-    detail::cusolver_getrf(
+#if defined(XPU_GPU)
+    detail::solver_getrf(
       handle_, order_, stride_,
       matrix, workspace_.data(), pivot_.data(), info_.data()
     );
@@ -708,7 +735,7 @@ public:
     auto info{0};
     xpu::copy_n(&info, info_.data(), 1uz);
     if (info < 0) {
-      detail::linalg_error("cuSOLVER getrf received an invalid argument");
+      detail::linalg_error(XPU_SOLVER_NAME " getrf received an invalid argument");
     }
     if (info > 0) { return status::singular; }
 #else
@@ -743,9 +770,9 @@ public:
 
     xpu::copy_n(solution, rhs, order_);
 
-#if defined(XPU_CUDA)
-    detail::cusolver_getrs(
-      handle_, CUBLAS_OP_T,
+#if defined(XPU_GPU)
+    detail::solver_getrs(
+      handle_, detail::solver_op_t,
       order_, 1uz,
       lower_upper, stride_,
       pivot_.data(),
@@ -756,7 +783,7 @@ public:
     auto info{0};
     xpu::copy_n(&info, info_.data(), 1uz);
     if (info != 0) {
-      detail::linalg_error("cuSOLVER getrs received an invalid argument");
+      detail::linalg_error(XPU_SOLVER_NAME " getrs received an invalid argument");
     }
 #else
     const auto info{
@@ -784,7 +811,7 @@ public:
       detail::linalg_error("lower_upper and inverse must not alias");
     }
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
     const auto range = xpu::range<2uz>{
       {0uz, 0uz},
       {order_, order_},
@@ -798,8 +825,8 @@ public:
 
     xpu::parallel_for(range, initialize);
 
-    detail::cusolver_getrs(
-      handle_, CUBLAS_OP_N,
+    detail::solver_getrs(
+      handle_, detail::solver_op_n,
       order_, order_,
       lower_upper, stride_,
       pivot_.data(),
@@ -810,7 +837,7 @@ public:
     auto info{0};
     xpu::copy_n(&info, info_.data(), 1uz);
     if (info != 0) {
-      detail::linalg_error("cuSOLVER getrs received an invalid argument");
+      detail::linalg_error(XPU_SOLVER_NAME " getrs received an invalid argument");
     }
 #else
     for (auto row{0uz}; row < order_; ++row) {
@@ -841,3 +868,6 @@ public:
 } // namespace xpu::linalg
 
 } // namespace xpu
+
+#undef XPU_SOLVER
+#undef XPU_SOLVER_NAME

@@ -1,4 +1,5 @@
 #include "cases.hpp"
+#include "../support/device.hpp"
 
 namespace {
 
@@ -25,10 +26,10 @@ auto run_device_soa_view_cases() -> int {
   auto values{xpu::soa<int, 2>{count}};
   auto output{xpu::soa<int, 2>{count}};
   write_soa_view<<<1, 32>>>(values.view());
-  xpu::cu_check(cudaGetLastError());
+  test::check_launch();
   read_soa_view<<<1, 32>>>(values.view(), output.view());
-  xpu::cu_check(cudaGetLastError());
-  xpu::cu_check(cudaDeviceSynchronize());
+  test::check_launch();
+  test::synchronize();
 
   int result[2][count]{};
   xpu::copy_n(result[0], output.view()[0], count);
@@ -36,7 +37,7 @@ auto run_device_soa_view_cases() -> int {
   for (auto i{0uz}; i < count; ++i) {
     if (result[0][i] != static_cast<int>(2uz * (i + 1uz)) 
     ||  result[1][i] != static_cast<int>((2uz * (i + 1uz)) + 1uz)) {
-      return test::fail("CUDA SoA View Indexing is incorrect");
+      return test::fail("GPU SoA View Indexing is incorrect");
     }
   }
   return 0;

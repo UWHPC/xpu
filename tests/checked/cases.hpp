@@ -98,7 +98,7 @@ inline auto run_checked_cases() -> int {
     return failure;
   }
 
-#if !defined(XPU_CUDA)
+#if !defined(XPU_GPU)
   if (const auto failure{test::check_abort([] {
     const auto range = xpu::range<2uz>{
       {0uz, 0uz},
