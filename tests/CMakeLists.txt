@@ -6,6 +6,11 @@ function(xpu_configure_test_target target)
       CUDA_STANDARD 23
       CUDA_STANDARD_REQUIRED ON
     )
+  elseif(XPU_HIP)
+    set_target_properties(${target} PROPERTIES
+      HIP_STANDARD 23
+      HIP_STANDARD_REQUIRED ON
+    )
   else()
     set_target_properties(${target} PROPERTIES
       CXX_STANDARD 23
@@ -19,7 +24,7 @@ function(xpu_add_backend_test module)
     return()
   endif()
 
-  if(XPU_CUDA)
+  if(XPU_GPU)
     set(source ${module}/cuda.cu)
   else()
     set(source ${module}/cpu.cpp)
@@ -29,14 +34,19 @@ function(xpu_add_backend_test module)
     return()
   endif()
 
+  # The GPU tests are shared, so HIP builds compile the .cu sources as HIP
+  if(XPU_HIP)
+    set_source_files_properties(${source} PROPERTIES LANGUAGE HIP)
+  endif()
+
   set(target xpu_test_${module})
   add_executable(${target} ${source})
   xpu_configure_test_target(${target})
-  if(module STREQUAL "math" AND NOT XPU_CUDA)
+  if(module STREQUAL "math" AND NOT XPU_GPU)
     find_package(Threads REQUIRED)
     target_link_libraries(${target} PRIVATE Threads::Threads)
   endif()
-  if(module STREQUAL "reduce" AND NOT XPU_CUDA)
+  if(module STREQUAL "reduce" AND NOT XPU_GPU)
     find_package(OpenMP QUIET)
     if(OpenMP_CXX_FOUND)
       target_link_libraries(${target} PRIVATE OpenMP::OpenMP_CXX)
@@ -46,7 +56,7 @@ function(xpu_add_backend_test module)
     target_link_libraries(${target} PRIVATE xpu::linalg)
   endif()
   add_test(NAME ${target} COMMAND ${target})
-  if(module STREQUAL "reduce" AND NOT XPU_CUDA)
+  if(module STREQUAL "reduce" AND NOT XPU_GPU)
     set_tests_properties(${target} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
   endif()
 endfunction()
@@ -86,6 +96,8 @@ foreach(header IN ITEMS
 
   if(XPU_CUDA)
     set(extension cu)
+  elseif(XPU_HIP)
+    set(extension hip)
   else()
     set(extension cpp)
   endif()

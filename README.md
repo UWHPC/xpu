@@ -1,8 +1,8 @@
 # xpu
 
-`xpu` is a small, header-only C++ library for code that runs on a CPU or NVIDIA
-CUDA. It provides backend-aware allocation, contiguous buffers,
-structure-of-arrays storage, math helpers, and basic CUDA launch utilities.
+`xpu` is a small, header-only C++ library for code that runs on a CPU, NVIDIA
+CUDA, or AMD HIP. It provides backend-aware allocation, contiguous buffers,
+structure-of-arrays storage, math helpers, and basic GPU launch utilities.
 
 The project is in early development. The API may change.
 
@@ -12,8 +12,13 @@ The project is in early development. The API may change.
 - CMake 3.25 or newer
 - CUDA 13.3 or newer for the CUDA backend
 - A compatible CUDA host compiler, with GCC 15 or newer when GCC is used
+- ROCm 7.0 or newer for the HIP backend, with hipCUB, rocPRIM and hipRAND
+- A C++ standard library with `<mdspan>` for HIP builds: libstdc++ from GCC 15
+  or newer, or libc++
 - LAPACKE for the optional CPU linear-algebra component
+- hipSOLVER for the optional HIP linear-algebra component
 - Linux, or Windows through WSL2, for CUDA builds
+- Linux for HIP builds
 
 The base CPU-only library has no external dependencies.
 CPU builds use OpenMP when CMake finds it; otherwise execution is serial.
@@ -45,12 +50,30 @@ cmake -S . -B build -G Ninja \
 cmake --build build
 ```
 
+HIP is enabled by default when CMake finds ROCm's `clang++` and CUDA is not in
+use. CUDA takes precedence when both toolchains are available. Point CMake at
+ROCm's compiler and set the target GPU architecture explicitly:
+
+```bash
+cmake -S . -B build-hip -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_HIP_COMPILER=/opt/rocm/llvm/bin/clang++ \
+  -DCMAKE_HIP_ARCHITECTURES=gfx942 \
+  -DXPU_ENABLE_CUDA=OFF
+
+cmake --build build-hip
+```
+
+Without `CMAKE_HIP_ARCHITECTURES`, CMake targets the GPUs that
+`rocm_agent_enumerator` reports, or the compiler's default when it finds none.
+
 For a CPU-only build:
 
 ```bash
 cmake -S . -B build-cpu -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DXPU_ENABLE_CUDA=OFF
+  -DXPU_ENABLE_CUDA=OFF \
+  -DXPU_ENABLE_HIP=OFF
 
 cmake --build build-cpu
 ```
@@ -63,6 +86,7 @@ sudo apt install liblapacke-dev
 cmake -S . -B build-cpu-linalg -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DXPU_ENABLE_CUDA=OFF \
+  -DXPU_ENABLE_HIP=OFF \
   -DXPU_ENABLE_LINALG=ON
 
 cmake --build build-cpu-linalg
@@ -77,8 +101,8 @@ target_link_libraries(my_target PRIVATE xpu::xpu)
 
 Link `xpu::linalg` instead when using `<xpu/linear_algebra.hpp>`.
 
-Set `XPU_ENABLE_CUDA` and `XPU_ENABLE_LINALG` before `add_subdirectory` when
-you need to select them explicitly.
+Set `XPU_ENABLE_CUDA`, `XPU_ENABLE_HIP` and `XPU_ENABLE_LINALG` before
+`add_subdirectory` when you need to select them explicitly.
 
 ## Buffers
 
@@ -98,8 +122,8 @@ const auto count{values.count()};
 const auto capacity{values.capacity()};
 ```
 
-`count()` is the requested number of elements. `capacity()` includes any CPU
-padding.
+`count()` is the requested number of elements. `capacity()` includes any
+alignment padding.
 
 ## Structure of arrays
 
@@ -150,31 +174,40 @@ is valid only while the original `soa` owns the allocation.
 
 ## Backend and memory model
 
-`XPU_CUDA` selects the allocation backend:
+`XPU_CUDA` or `XPU_HIP` selects the allocation backend:
 
 | Backend | Allocation |
 |---|---|
 | CPU | aligned `operator new` |
 | CUDA | `cudaMalloc` |
+| HIP | `hipMalloc` |
 
-The `xpu::xpu` CMake target sets `XPU_CUDA` for CUDA builds. Do not set it on
-individual source files. It must have the same value in every translation unit
-linked into a program.
+The `xpu::xpu` CMake target sets `XPU_CUDA` for CUDA builds and `XPU_HIP` for
+HIP builds. Do not set them on individual source files. They must have the same
+value in every translation unit linked into a program. `<xpu/config.hpp>`
+defines `XPU_GPU` for either GPU backend, and `xpu::xpu_cuda`, `xpu::xpu_hip`
+and `xpu::xpu_gpu` expose the same choice as constants.
 
 When CUDA is enabled, every translation unit that includes an xpu header must be
 compiled by nvcc. These files normally use the `.cu` extension.
 
-CUDA allocations are device memory. Pointers returned by `buffer` and `soa`
-cannot be dereferenced by host code. The library does not currently wrap memory
-transfers, so use the CUDA runtime directly when transfers are required.
+When HIP is enabled, every translation unit that includes an xpu header must be
+compiled as HIP. Use the `.hip` extension or set the `LANGUAGE HIP` source file
+property. The test suite does the latter to reuse its `.cu` sources.
+
+GPU allocations are device memory. Pointers returned by `buffer` and `soa`
+cannot be dereferenced by host code. Use `xpu::copy_n` or `xpu::memcpy` to move
+data between host and device memory; the runtime infers the direction.
 
 Allocation failure terminates the process with `std::abort`.
 
 ## Padding
 
-CPU allocations are aligned to at least `xpu::simd_bytes`. Capacities and SoA
-strides are padded to SIMD-lane multiples when the element type is smaller than
-the SIMD width. CUDA uses a tight layout with no row padding.
+CPU allocations are aligned to at least `xpu::simd_bytes`. GPU builds use
+`xpu::cuda_align_bytes`, which is 128 bytes, instead. When the element type is
+smaller than that alignment, capacities and SoA strides are padded to a multiple
+of `alignment / sizeof(T)` elements (integer division), which fills whole
+alignment blocks when `sizeof(T)` is a power of two.
 
 The default SIMD width is 64 bytes with AVX-512, 32 bytes with AVX or AVX2, and
 16 bytes otherwise. Pin it when layout must remain stable across machines:
@@ -203,32 +236,43 @@ if (
 
 Use `solve()` for linear systems. Use `invert()` only when the inverse itself
 is required. Matrices use row-major layout, and strides are measured in
-elements.
+elements. The component uses LAPACKE on the CPU, cuSOLVER on CUDA, and
+hipSOLVER on HIP.
 
 ## Testing
 
 ```bash
-./scripts/test.sh             # CPU and CUDA test suites
+./scripts/test.sh             # every available suite: CPU, CUDA, then HIP
 ./scripts/test.sh --sanitize  # CUDA Compute Sanitizer
 ./scripts/test.sh --cpp       # CPU test suite only
 ./scripts/test.sh --cu        # CUDA test suite only
+./scripts/test.sh --hip       # HIP test suite only
 ```
 
-Behavioral tests are grouped by component under `tests/`. CPU and CUDA entry
-points are kept separate, while backend-neutral cases live beside them in a
+The script finds ROCm's `clang++` through `HIPCXX` or
+`$ROCM_PATH/llvm/bin/clang++`, where `ROCM_PATH` defaults to `/opt/rocm`. It
+skips a GPU suite whose compiler is missing unless that suite was requested
+explicitly. `--sanitize` applies to the CUDA suite only.
+
+Behavioral tests are grouped by component under `tests/`. CPU and GPU entry
+points are kept separate in `cpu.cpp` and `cuda.cu`, and HIP builds compile the
+`cuda.cu` entry points as HIP. Backend-neutral cases live beside them in a
 shared `cases.hpp`. Common test support lives in `tests/support`, umbrella-header
 coverage lives in `tests/integration`, and every exported header also gets a
 compile-only self-containment check.
 
 GitHub Actions runs the CPU suite on Ubuntu 26.04 with GCC 15. CUDA runtime
 testing is enabled when the repository variable `XPU_CUDA_CI` is `true` and a
-self-hosted Linux x64 runner with the `gpu` label is available.
+self-hosted Linux x64 runner with the `gpu` label is available. HIP runtime
+testing works the same way with the `XPU_HIP_CI` variable and a runner with the
+`rocm` label.
 
 ## Current limitations
 
-- NVIDIA CUDA is the only GPU backend.
-- CPU and CUDA backends cannot be mixed in one linked program.
-- CUDA memory transfers are not wrapped.
+- A build uses one backend. CPU, CUDA and HIP cannot be mixed in one linked
+  program.
+- Random sequences are backend-specific. The same seed need not produce the
+  same values on the CPU, CUDA and HIP.
 - Accessors do not perform bounds checking.
 - Multidimensional launch configuration is still a work in progress.
 - Installed CMake package metadata is incomplete.

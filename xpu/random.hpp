@@ -5,6 +5,8 @@
 
 #if defined(XPU_CUDA)
   #include <curand_kernel.h>
+#elif defined(XPU_HIP)
+  #include <hiprand/hiprand_kernel.h>
 #else
   #include <random>
 #endif
@@ -21,12 +23,20 @@ namespace random {
 
 class generator {
 private:
+#if defined(XPU_GPU)
 #if defined(XPU_CUDA)
   curandStatePhilox4_32_10_t engine_;
+#else
+  hiprandStatePhilox4_32_10_t engine_;
+#endif
 
   [[nodiscard]] XPU_DEVICE_ONLY
   auto next_u32() -> std::uint32_t {
+#if defined(XPU_CUDA)
     return curand(&engine_);
+#else
+    return hiprand(&engine_);
+#endif
   }
 
   [[nodiscard]] XPU_DEVICE_ONLY
@@ -48,6 +58,8 @@ public:
   ) -> void {
 #if defined(XPU_CUDA)
     curand_init(master_seed, stream_id, offset, &engine_);
+#elif defined(XPU_HIP)
+    hiprand_init(master_seed, stream_id, offset, &engine_);
 #else
     auto seed{std::seed_seq{
       static_cast<std::uint32_t>(master_seed),
@@ -68,6 +80,13 @@ public:
     } else {
       return T{1} - curand_uniform_double(&engine_);
     }
+#elif defined(XPU_HIP)
+    if constexpr (std::same_as<T, float>) {
+      // 1 - hiprand_uniform rounds to 1 for the smallest draws, so take [0, 1) from the top 24 bits
+      return static_cast<T>(next_u32() >> 8u) * 0x1p-24f;
+    } else {
+      return T{1} - hiprand_uniform_double(&engine_);
+    }
 #else
     return std::generate_canonical<T, std::numeric_limits<T>::digits>(engine_);
 #endif
@@ -79,7 +98,7 @@ public:
     const auto value{minimum + (maximum - minimum) * uniform<T>()};
     if (value < maximum) { return value; }
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
     if constexpr (std::same_as<T, float>) {
       return ::nextafterf(maximum, minimum);
     } else {
@@ -94,7 +113,7 @@ public:
   auto uniform_index(std::size_t upper_bound) -> std::size_t {
     assert(upper_bound != 0uz);
 
-#if defined(XPU_CUDA)
+#if defined(XPU_GPU)
     const auto bound{static_cast<std::uint64_t>(upper_bound)};
     const auto threshold{(std::uint64_t{0} - bound) % bound};
 

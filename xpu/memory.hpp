@@ -49,6 +49,9 @@ inline auto alloc(std::size_t count) -> T* {
 #if defined(XPU_CUDA)
   auto ptr{static_cast<void*>(nullptr)};
   if(cudaMalloc(&ptr, bytes) != cudaSuccess) { ptr = nullptr; }
+#elif defined(XPU_HIP)
+  auto ptr{static_cast<void*>(nullptr)};
+  if(hipMalloc(&ptr, bytes) != hipSuccess) { ptr = nullptr; }
 #else
   auto ptr{::operator new(bytes, std::align_val_t{default_align<T>}, std::nothrow)};
 #endif
@@ -71,6 +74,8 @@ inline auto free(T* ptr) noexcept -> void {
 
 #if defined(XPU_CUDA)
   cudaFree(ptr);
+#elif defined(XPU_HIP)
+  static_cast<void>(hipFree(ptr));
 #else
   ::operator delete(ptr, std::align_val_t(default_align<T>));
 #endif
@@ -109,6 +114,8 @@ inline auto memset(
 
 #if defined(XPU_CUDA)
   xpu::cu_check(cudaMemset(dst, value, bytes));
+#elif defined(XPU_HIP)
+  xpu::cu_check(hipMemset(dst, value, bytes));
 #else
   std::memset(dst, value, bytes);
 #endif
@@ -123,6 +130,8 @@ inline auto memcpy(
 
 #if defined(XPU_CUDA)
   xpu::cu_check(cudaMemcpy(dst, src, bytes, cudaMemcpyDefault));
+#elif defined(XPU_HIP)
+  xpu::cu_check(hipMemcpy(dst, src, bytes, hipMemcpyDefault));
 #else
   std::memcpy(dst, src, bytes);
 #endif

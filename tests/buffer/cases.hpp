@@ -78,7 +78,7 @@ inline int run_buffer_cases() {
     return test::fail("non-empty buffer has a null data pointer");
   }
 
-  if constexpr (!xpu::xpu_cuda) {
+  if constexpr (!xpu::xpu_gpu) {
     view[0uz] = 7.0f;
     if (&view[0uz] != values.data() || readonly[0uz] != 7.0f) {
       return test::fail("buffer owner view does not refer to its storage");

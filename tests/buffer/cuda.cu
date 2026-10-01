@@ -1,4 +1,5 @@
 #include "cases.hpp"
+#include "../support/device.hpp"
 
 namespace {
 
@@ -24,16 +25,16 @@ auto run_device_buffer_view_cases() -> int {
   auto values{xpu::buffer<int>{count}};
   auto output{xpu::buffer<int>{count}};
   write_buffer_view<<<1, 32>>>(values.view());
-  xpu::cu_check(cudaGetLastError());
+  test::check_launch();
   read_buffer_view<<<1, 32>>>(std::as_const(values).view(), output.view());
-  xpu::cu_check(cudaGetLastError());
-  xpu::cu_check(cudaDeviceSynchronize());
+  test::check_launch();
+  test::synchronize();
 
   int result[count]{};
   xpu::copy_n(result, output.data(), count);
   for (auto i{0uz}; i < count; ++i) {
     if (result[i] != static_cast<int>(2uz * (i + 1uz))) {
-      return test::fail("CUDA buffer view indexing is incorrect");
+      return test::fail("GPU buffer view indexing is incorrect");
     }
   }
   return 0;

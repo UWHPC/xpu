@@ -34,6 +34,9 @@ inline auto checked_error(const char* message) noexcept -> void {
 #if defined(__CUDA_ARCH__)
   printf("xpu: %s\n", message);
   __trap();
+#elif defined(__HIP_DEVICE_COMPILE__)
+  printf("xpu: %s\n", message);
+  __builtin_trap();
 #else
   std::fprintf(stderr, "xpu: %s\n", message);
   std::abort();
