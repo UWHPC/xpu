@@ -283,12 +283,21 @@ struct parallel_for_function {
   xpu::array<std::size_t, dims> counts;
 
   XPU_DEVICE_ONLY
-  auto operator()(std::size_t linear) -> void {
+  auto operator()(std::size_t linear) const -> void {
     const auto index{xpu::detail::itr_index(range, linear, counts)};
 
     fcn(index);
   }
 };
+
+template <typename Op>
+__global__ void parallel_for_kernel(const Op op, std::size_t total) {
+  for (auto i{xpu::linear_index()}; i < total; i += xpu::linear_stride()) {
+    op(i);
+  }
+}
+
+
 #endif
 
 #if !defined(XPU_CUDA)
@@ -371,14 +380,22 @@ inline auto parallel_for_impl(
   if (total == 0uz) { return; }
 
   using function_t = std::decay_t<F>;
+  using operation_t = parallel_for_function<dims, function_t>;
 
-  const auto operation{parallel_for_function<dims, function_t>{
+  const auto operation{operation_t{
     range,
     function_t{std::forward<F>(fcn)},
     itr_counts(range)
   }};
 
-  xpu::cu_check(cub::DeviceFor::Bulk(total, operation));
+  constexpr auto threads{256u};
+  static const auto wave{xpu::detail::wave_blocks(parallel_for_kernel<operation_t>, threads)};
+
+  const auto needed{xpu::ceiling_div<std::size_t>(total, threads)};
+  const auto blocks{static_cast<unsigned int>(xpu::min(needed, static_cast<std::size_t>(wave)))};
+
+  parallel_for_kernel<<<blocks, threads>>>(operation, total);
+  xpu::cu_check(cudaGetLastError());
 #else
   auto dense{true};
   for (auto dimension{0uz}; dimension < dims; ++dimension) {
