@@ -10,15 +10,37 @@
 
 namespace xpu {
 
+namespace detail {
+
+template <typename T>
+struct load_element {
+  const T* ptr;
+
+  XPU_CUDA_CALLABLE
+  auto operator()(const xpu::array<std::size_t, 1uz>& index) const -> T {
+    return ptr[index[0]];
+  }
+};
+
+template <typename T>
+struct log_element {
+  const T* ptr;
+
+  XPU_CUDA_CALLABLE
+  auto operator()(const xpu::array<std::size_t, 1uz>& index) const -> T {
+    return xpu::log(ptr[index[0]]);
+  }
+};
+
+} // namespace detail
+
 template <arithmetic T>
 inline auto accumulate(const T* ptr, std::size_t count) -> T {
   const auto range = xpu::range<1uz>{
     .begin = {0uz}, .end = {count}, .step = {1uz}
   };
 
-  const auto contribution = [ptr] XPU_CUDA_CALLABLE (const xpu::array<std::size_t, 1uz>& index) -> T {
-    return ptr[index[0]];
-  };
+  const auto contribution{xpu::detail::load_element<T>{ptr}};
 
   const auto sum_device{xpu::make_unique<T>(1uz)};
 
@@ -41,9 +63,7 @@ inline auto geometric_mean(const T* ptr, std::size_t count) -> T {
     .begin = {0uz}, .end = {count}, .step = {1uz}
   };
 
-  const auto contribution = [ptr] XPU_CUDA_CALLABLE (const xpu::array<std::size_t, 1uz>& index) -> T {
-    return xpu::log(ptr[index[0]]);
-  };
+  const auto contribution{xpu::detail::log_element<T>{ptr}};
 
   const auto log_sum_device{xpu::make_unique<T>(1uz)};
 
