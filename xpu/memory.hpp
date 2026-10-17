@@ -1,6 +1,5 @@
 #pragma once
 
-#include <print>
 #include <xpu/algorithm.hpp>
 #include <xpu/config.hpp>
 #include <xpu/detail/checked.hpp>
@@ -55,7 +54,7 @@ auto alloc(std::size_t count) -> T* {
   if (!ptr) {
     std::fprintf(
       stderr,
-      "xpu: failed to allocate {:d} bytes",
+      "xpu: failed to allocate %zu bytes\n",
       bytes<T>(count)
     );
     std::abort();
