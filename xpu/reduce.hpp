@@ -32,15 +32,11 @@ struct log_element {
   }
 };
 
-} // namespace detail
-
-template <arithmetic T>
-inline auto accumulate(const T* ptr, std::size_t count) -> T {
+template <typename T, typename F>
+inline auto reduce_sum(std::size_t count, const F& contribution) -> T {
   const auto range = xpu::range<1uz>{
     .begin = {0uz}, .end = {count}, .step = {1uz}
   };
-
-  const auto contribution{xpu::detail::load_element<T>{ptr}};
 
   const auto sum_device{xpu::make_unique<T>(1uz)};
 
@@ -52,6 +48,13 @@ inline auto accumulate(const T* ptr, std::size_t count) -> T {
   return sum;
 }
 
+} // namespace detail
+
+template <arithmetic T>
+inline auto accumulate(const T* ptr, std::size_t count) -> T {
+  return xpu::detail::reduce_sum<T>(count, xpu::detail::load_element<T>{ptr});
+}
+
 template <arithmetic T>
 inline auto average(const T* ptr, std::size_t count) -> T {
   return accumulate(ptr, count) / static_cast<T>(count);
@@ -59,18 +62,7 @@ inline auto average(const T* ptr, std::size_t count) -> T {
 
 template <std::floating_point T>
 inline auto geometric_mean(const T* ptr, std::size_t count) -> T {
-  const auto range = xpu::range<1uz>{
-    .begin = {0uz}, .end = {count}, .step = {1uz}
-  };
-
-  const auto contribution{xpu::detail::log_element<T>{ptr}};
-
-  const auto log_sum_device{xpu::make_unique<T>(1uz)};
-
-  xpu::parallel_reduce_sum(range, log_sum_device.get(), contribution);
-
-  auto log_sum{T{0}};
-  xpu::copy_n(&log_sum, log_sum_device.get(), 1uz);
+  const auto log_sum{xpu::detail::reduce_sum<T>(count, xpu::detail::log_element<T>{ptr})};
 
   return xpu::exp(log_sum / static_cast<T>(count));
 }
