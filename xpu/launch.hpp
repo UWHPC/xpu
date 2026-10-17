@@ -182,46 +182,52 @@ struct [[nodiscard]] range {
 namespace detail {
 
 template <std::size_t dims>
-inline constexpr auto num_itrs(
+constexpr auto itr_counts(
+  const xpu::range<dims>& range
+) noexcept -> xpu::array<size_t, dims> {
+  static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
+  auto counts{xpu::array<std::size_t, dims>{}};
+
+  for (auto d{0uz}; d < dims; ++d) {
+    const auto empty_dimension{range.step[d] == 0uz || range.begin[d] >= range.end[d]};
+    if (empty_dimension) {return xpu::array<size_t, dims>{};}
+    const auto delta{range.end[d] - range.begin[d]};
+    counts[d] = xpu::ceiling_div(delta, range.step[d]);
+  }
+  return counts;
+}
+
+template <std::size_t dims>
+constexpr auto num_itrs(
   const xpu::range<dims>& range
 ) noexcept -> std::size_t {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
   auto total{1uz};
+  const auto counts{itr_counts(range)};
 
-  for (auto d{0uz}; d < dims; ++d) {
-    const auto empty_dimension{range.step[d] == 0uz || range.begin[d] >= range.end[d]};
-
-    if (empty_dimension) {
-      const auto empty_count{0uz};
-
-      return empty_count;
-    }
+  for (auto d{0uz}; d < dims; ++d){
+    total = checked_mul(total, counts[d]);
   }
 
-  for (auto d{0uz}; d < dims; ++d) {
-    const auto delta{range.end[d] - range.begin[d]};
-    const auto count{xpu::ceiling_div(delta, range.step[d])};
-    total = xpu::detail::checked_mul(total, count);
-  }
 
   return total;
 }
 
 template <std::size_t dims> XPU_CUDA_CALLABLE
-inline constexpr auto itr_index(
+constexpr auto itr_index(
   const xpu::range<dims>& range,
-  std::size_t linear
+  std::size_t linear,
+  xpu::array<std::size_t, dims> counts
 ) noexcept -> xpu::array<std::size_t, dims> {
   static_assert(dims > 0uz, "ERROR: Dimension must be greater than 0.");
   auto index{xpu::array<std::size_t, dims>{}};
 
   for (auto d{dims}; d-- > 1uz;) {
-    const auto delta{range.end[d] - range.begin[d]};
-    const auto count{xpu::ceiling_div(delta, range.step[d])};
-    const auto coordinate{linear % count};
+    const auto linear_quotient{linear/counts[d]};
+    const auto coordinate{linear - (linear_quotient * counts[d])};
+    linear = linear_quotient;
 
     index[d] = range.begin[d] + coordinate * range.step[d];
-    linear /= count;
   }
 
   index[0] = range.begin[0] + linear * range.step[0];
@@ -241,10 +247,11 @@ template <std::size_t dims, arithmetic T, typename F>
 struct reduction_contribution {
   xpu::range<dims> range;
   F contribution;
+  xpu::array<std::size_t, dims> counts;
 
   [[nodiscard]] XPU_CUDA_CALLABLE
   auto operator()(std::size_t linear) const -> T {
-    const auto index{xpu::detail::itr_index(range, linear)};
+    const auto index{xpu::detail::itr_index(range, linear, counts)};
     const auto value{T{contribution(index)}};
 
     return value;
@@ -260,7 +267,7 @@ inline auto reduction_input(
   using function_t = std::decay_t<F>;
 
   const auto transform{reduction_contribution<dims, T, function_t>{
-    range, function_t{std::forward<F>(contribution)}
+    range, function_t{std::forward<F>(contribution)}, itr_counts(range)
   }};
 
   const auto indices{thrust::counting_iterator<std::size_t>{0uz}};
@@ -273,14 +280,24 @@ template <std::size_t dims, typename F>
 struct parallel_for_function {
   xpu::range<dims> range;
   F fcn;
+  xpu::array<std::size_t, dims> counts;
 
   XPU_DEVICE_ONLY
-  auto operator()(std::size_t linear) -> void {
-    const auto index{xpu::detail::itr_index(range, linear)};
+  auto operator()(std::size_t linear) const -> void {
+    const auto index{xpu::detail::itr_index(range, linear, counts)};
 
     fcn(index);
   }
 };
+
+template <typename Op>
+__global__ void parallel_for_kernel(const Op op, std::size_t total) {
+  for (auto i{xpu::linear_index()}; i < total; i += xpu::linear_stride()) {
+    op(i);
+  }
+}
+
+
 #endif
 
 #if !defined(XPU_CUDA)
@@ -363,13 +380,22 @@ inline auto parallel_for_impl(
   if (total == 0uz) { return; }
 
   using function_t = std::decay_t<F>;
+  using operation_t = parallel_for_function<dims, function_t>;
 
-  const auto operation{parallel_for_function<dims, function_t>{
+  const auto operation{operation_t{
     range,
-    function_t{std::forward<F>(fcn)}
+    function_t{std::forward<F>(fcn)},
+    itr_counts(range)
   }};
 
-  xpu::cu_check(cub::DeviceFor::Bulk(total, operation));
+  constexpr auto threads{256u};
+  static const auto wave{xpu::detail::wave_blocks(parallel_for_kernel<operation_t>, threads)};
+
+  const auto needed{xpu::ceiling_div<std::size_t>(total, threads)};
+  const auto blocks{static_cast<unsigned int>(xpu::min(needed, static_cast<std::size_t>(wave)))};
+
+  parallel_for_kernel<<<blocks, threads>>>(operation, total);
+  xpu::cu_check(cudaGetLastError());
 #else
   auto dense{true};
   for (auto dimension{0uz}; dimension < dims; ++dimension) {
