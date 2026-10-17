@@ -7,4 +7,5 @@
 #include <xpu/math.hpp>
 #include <xpu/memory.hpp>
 #include <xpu/numeric.hpp>
+#include <xpu/reduce.hpp>
 #include <xpu/soa.hpp>
