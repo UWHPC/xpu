@@ -57,9 +57,13 @@ jobs:
       - name: Install build tools
         run: |
           apt-get update
-          apt-get install -y g++-15 cmake ninja-build
+          apt-get install -y g++-15 ninja-build python3-venv
+          python3 -m venv /opt/xpu-cmake
+          /opt/xpu-cmake/bin/python -m pip install --disable-pip-version-check --only-binary=:all: cmake==4.4.2
+          echo /opt/xpu-cmake/bin >> "$GITHUB_PATH"
       - name: Configure
         run: |
+          cmake --version
           cmake -S . -B build-cuda -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_LIBDIR=lib \
