@@ -45,3 +45,49 @@ jobs:
 
       - name: Test
         run: ./scripts/test.sh --cu --clean
+
+  cuda-compile:
+    name: CUDA Compile
+    runs-on: ubuntu-26.04
+    container: nvidia/cuda:13.3.1-devel-ubuntu26.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y g++-15 ninja-build python3-venv
+          python3 -m venv /opt/xpu-cmake
+          /opt/xpu-cmake/bin/python -m pip install --disable-pip-version-check --only-binary=:all: cmake==4.4.2
+          echo /opt/xpu-cmake/bin >> "$GITHUB_PATH"
+      - name: Configure
+        run: |
+          cmake --version
+          cmake -S . -B build-cuda -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_CXX_COMPILER=g++-15 \
+            -DCMAKE_CUDA_HOST_COMPILER=g++-15 \
+            -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+            -DCMAKE_CUDA_ARCHITECTURES=80 \
+            -DCMAKE_CUDA_FLAGS="--Werror all-warnings" \
+            -DXPU_ENABLE_CUDA=ON \
+            -DXPU_ENABLE_LINALG=ON \
+            -DXPU_BUILD_TESTS=ON \
+            -DXPU_ARCH_NATIVE=OFF
+      - name: Build CUDA tests
+        run: cmake --build build-cuda --parallel 2
+      - name: Install XPU
+        run: cmake --install build-cuda --prefix "$GITHUB_WORKSPACE/xpu-install"
+      - name: Build installed-target consumer
+        run: |
+          cmake -S tests/consumer -B build-consumer -G Ninja \
+            -DXPU_INSTALL_PREFIX="$GITHUB_WORKSPACE/xpu-install" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=g++-15 \
+            -DCMAKE_CUDA_HOST_COMPILER=g++-15 \
+            -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+            -DCMAKE_CUDA_ARCHITECTURES=80 \
+            -DCMAKE_CUDA_FLAGS="--Werror all-warnings"
+          cmake --build build-consumer --parallel 2
