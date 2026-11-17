@@ -16,7 +16,15 @@ project(xpu LANGUAGES CXX)
 option(XPU_ENABLE_CUDA "Build the CUDA backend if a CUDA compiler is available" ON)
 option(XPU_ENABLE_LINALG "Build the optional linear-algebra component" OFF)
 option(XPU_ARCH_NATIVE "Tune for the host architecture (-march=native)" ON)
+option(XPU_NO_MATH_ERRNO "Let sqrt and friends inline and vectorize (-fno-math-errno)" ON)
 option(XPU_BUILD_TESTS "Build the xpu tests" ${PROJECT_IS_TOP_LEVEL})
+
+# An empty build type compiles without optimization
+get_property(XPU_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(PROJECT_IS_TOP_LEVEL AND NOT XPU_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+  message(STATUS "xpu: no build type given, defaulting to Release")
+endif()
 
 set(XPU_SIMD_BYTES "" CACHE STRING
   "Pin the SIMD width in bytes (16/32/64). Empty means detect from the arch flags.")
@@ -122,6 +130,12 @@ if(XPU_ARCH_NATIVE AND NOT MSVC)
   target_compile_options(xpu INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-march=native>
     $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-march=native>
+  )
+endif()
+
+if(XPU_NO_MATH_ERRNO AND NOT MSVC)
+  target_compile_options(xpu INTERFACE
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-math-errno>
   )
 endif()
 

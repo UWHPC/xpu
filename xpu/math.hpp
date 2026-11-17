@@ -48,14 +48,60 @@ using xstd::lgamma; using xstd::tgamma;
 // magnitude / selection
 using xstd::min; using xstd::max;
 using xstd::abs;   using xstd::fabs;
+
+#if defined(XPU_CUDA)
 using xstd::fmin;  using xstd::fmax;
+#else
+// libm's fmin/fmax are calls that stop a loop from vectorizing unless the
+// consumer builds with -ffinite-math-only; these keep the NaN rule (a NaN
+// argument yields the other one) with two compares.
+template <typename X, typename Y>
+  requires std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>
+[[nodiscard]]
+inline constexpr auto fmin(X x, Y y) noexcept -> decltype(std::fmin(x, y)) {
+  using result_t = decltype(std::fmin(x, y));
+  const auto a{static_cast<result_t>(x)};
+  const auto b{static_cast<result_t>(y)};
+
+  return (b != b || a < b) ? a : b;
+}
+
+template <typename X, typename Y>
+  requires std::is_arithmetic_v<X> && std::is_arithmetic_v<Y>
+[[nodiscard]]
+inline constexpr auto fmax(X x, Y y) noexcept -> decltype(std::fmax(x, y)) {
+  using result_t = decltype(std::fmax(x, y));
+  const auto a{static_cast<result_t>(x)};
+  const auto b{static_cast<result_t>(y)};
+
+  return (b != b || a > b) ? a : b;
+}
+#endif
 
 // arithmetic
 using xstd::fmod;  using xstd::remainder; using xstd::fma;
 
 // rounding
-using xstd::floor; using xstd::ceil;  using xstd::round;
+using xstd::floor; using xstd::ceil;
 using xstd::trunc; using xstd::nearbyint; using xstd::rint;
+
+#if defined(XPU_CUDA)
+using xstd::round;
+#else
+// half-away-from-zero rounding has no SSE/AVX instruction, so libm's round is
+// a call; trunc is one, and the half case is a compare.
+template <typename X>
+  requires std::is_arithmetic_v<X>
+[[nodiscard]]
+inline constexpr auto round(X x) noexcept -> decltype(std::round(x)) {
+  using result_t = decltype(std::round(x));
+  const auto value{static_cast<result_t>(x)};
+  const auto whole{std::trunc(value)};
+  const auto half{std::fabs(value - whole) >= result_t{0.5}};
+
+  return whole + std::copysign(half ? result_t{1} : result_t{0}, value);
+}
+#endif
 
 // classification
 using xstd::copysign; using xstd::signbit;

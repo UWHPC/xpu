@@ -63,6 +63,11 @@ public:
     , data_{xpu::make_unique<T>(xpu::handle_pad<T>(count))}
   { }
 
+  explicit buffer(std::size_t count, xpu::uninitialized_t tag)
+    : count_{count}
+    , data_{xpu::make_unique<T>(xpu::handle_pad<T>(count), tag)}
+  { }
+
   [[nodiscard]]
   constexpr auto count() const noexcept -> std::size_t {
     return count_;

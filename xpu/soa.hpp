@@ -19,12 +19,14 @@ class soa_view {
 private:
   T* base_;
   std::size_t count_;
+  std::size_t stride_; // cached: recomputing the padding per access blocks vectorization
 
 public:
   XPU_CUDA_CALLABLE
   explicit constexpr soa_view(T* base, std::size_t count) noexcept
     : base_{base}
     , count_{count}
+    , stride_{xpu::handle_pad<T>(count)}
   {
     const auto storage_count{xpu::detail::checked_mul(exposed_arrays, stride())};
     static_cast<void>(xpu::detail::checked_bytes<T>(storage_count));
@@ -37,7 +39,7 @@ public:
 
   [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return stride_;
   }
 
   template <typename Self> [[nodiscard]] XPU_CUDA_CALLABLE
@@ -75,6 +77,7 @@ private:
   T* base_;
   std::size_t batches_;
   std::size_t count_;
+  std::size_t array_stride_;
 
 public:
   XPU_CUDA_CALLABLE
@@ -86,6 +89,7 @@ public:
     : base_{base}
     , batches_{batches}
     , count_{count}
+    , array_stride_{xpu::handle_pad<T>(count)}
   { }
 
   [[nodiscard]] XPU_CUDA_CALLABLE
@@ -100,7 +104,7 @@ public:
 
   [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto array_stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return array_stride_;
   }
 
   [[nodiscard]] XPU_CUDA_CALLABLE
@@ -129,17 +133,14 @@ class soa {
 
 private:
   std::size_t count_;
+  std::size_t stride_;
   xpu::buffer<T> buffer_;
 
 public:
   explicit soa(std::size_t count) noexcept
     : count_{count}
-    , buffer_{
-        xpu::detail::checked_mul(
-          num_arrays,
-          xpu::handle_pad<T>(count)
-        )
-      }
+    , stride_{xpu::handle_pad<T>(count)}
+    , buffer_{xpu::detail::checked_mul(num_arrays, stride_)}
   { }
 
   [[nodiscard]]
@@ -149,7 +150,7 @@ public:
 
   [[nodiscard]]
   constexpr auto stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return stride_;
   }
 
   [[nodiscard]]
@@ -197,19 +198,18 @@ class soa_batch {
 private:
   std::size_t batches_;
   std::size_t count_;
+  std::size_t array_stride_;
   buffer<T> storage_;
 
 public:
   explicit soa_batch(std::size_t batches, std::size_t count) noexcept
     : batches_{batches}
     , count_{count}
+    , array_stride_{xpu::handle_pad<T>(count)}
     , storage_{
         xpu::detail::checked_mul(
           batches,
-          xpu::detail::checked_mul(
-            num_arrays,
-            xpu::handle_pad<T>(count)
-          )
+          xpu::detail::checked_mul(num_arrays, array_stride_)
         )
       }
   { }
@@ -231,7 +231,7 @@ public:
 
   [[nodiscard]] XPU_CUDA_CALLABLE
   constexpr auto array_stride() const noexcept -> std::size_t {
-    return xpu::handle_pad<T>(count_);
+    return array_stride_;
   }
 
   [[nodiscard]] XPU_CUDA_CALLABLE

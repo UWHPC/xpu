@@ -86,13 +86,32 @@ struct deleter {
 template <typename T>
 using unique_ptr = std::unique_ptr<T[], xpu::deleter<T>>;
 
+// tag for storage that the caller overwrites before reading
+struct uninitialized_t {
+  explicit uninitialized_t() = default;
+};
+
+inline constexpr auto uninitialized{uninitialized_t{}};
+
 template <typename T>
 auto make_unique(std::size_t count, T value = T{}) -> unique_ptr<T> {
   auto* XPU_RESTRICT ptr{xpu::alloc<T>(count)};
 
+#if defined(XPU_CUDA)
   xpu::fill_n(ptr, count, value);
+#else
+  // first touch: page faults scale with threads at every size
+  const auto parallel{count * sizeof(T) >= detail::parallel_bytes_min};
+
+  detail::fill_chunks(ptr, count, value, parallel);
+#endif
 
   return xpu::unique_ptr<T>{ptr};
+}
+
+template <typename T>
+auto make_unique(std::size_t count, uninitialized_t) -> unique_ptr<T> {
+  return xpu::unique_ptr<T>{xpu::alloc<T>(count)};
 }
 
 template <typename T> [[nodiscard]] XPU_CUDA_CALLABLE
@@ -110,7 +129,12 @@ inline auto memset(
 #if defined(XPU_CUDA)
   xpu::cu_check(cudaMemset(dst, value, bytes));
 #else
-  std::memset(dst, value, bytes);
+  detail::for_each_chunk(
+    bytes, detail::parallel_chunk_bytes, detail::parallel_bytes(bytes),
+    [&](std::size_t offset, std::size_t length) {
+      std::memset(static_cast<std::byte*>(dst) + offset, value, length);
+    }
+  );
 #endif
 }
 
@@ -124,7 +148,16 @@ inline auto memcpy(
 #if defined(XPU_CUDA)
   xpu::cu_check(cudaMemcpy(dst, src, bytes, cudaMemcpyDefault));
 #else
-  std::memcpy(dst, src, bytes);
+  detail::for_each_chunk(
+    bytes, detail::parallel_chunk_bytes, detail::parallel_bytes(bytes),
+    [&](std::size_t offset, std::size_t length) {
+      std::memcpy(
+        static_cast<std::byte*>(dst) + offset,
+        static_cast<const std::byte*>(src) + offset,
+        length
+      );
+    }
+  );
 #endif
 }
 

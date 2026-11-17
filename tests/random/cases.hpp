@@ -36,6 +36,13 @@ inline int check_random_samples(const random_sample* samples) {
     }
   }
 
+  // seed(42, 3, 1): both backends produce the same Philox4x32-10 stream
+  const auto& first{samples[0]};
+  if (first.uniform_float != 0x1.1bd6ecp-1f || first.uniform_double != 0x1.1b9ce698p-2 ||
+      first.bounded != 0x1.2f1a8cp-7 || first.index != 3uz) {
+    return test::fail("random stream differs from the reference stream");
+  }
+
   return 0;
 }
 
