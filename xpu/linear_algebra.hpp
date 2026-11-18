@@ -85,10 +85,26 @@ struct transpose_square {
   }
 };
 
-inline auto create_cusolver_handle() -> cusolverDnHandle_t {
-  auto handle{cusolverDnHandle_t{}};
-  xpu::cu_check(cusolverDnCreate(&handle));
-  return handle;
+struct cusolver_handle {
+  cusolverDnHandle_t handle{};
+
+  cusolver_handle() {
+    xpu::cu_check(cusolverDnCreate(&handle));
+  }
+
+  ~cusolver_handle() {
+    static_cast<void>(cusolverDnDestroy(handle));
+  }
+
+  auto operator=(const cusolver_handle&) -> cusolver_handle& = delete;
+  cusolver_handle(const cusolver_handle&) = delete;
+};
+
+// cusolverDnCreate costs ~0.4 ms, so factorizations on a thread share one handle
+inline auto shared_cusolver_handle() -> cusolverDnHandle_t {
+  thread_local const auto shared{cusolver_handle{}};
+
+  return shared.handle;
 }
 
 template <supported_float T>
@@ -293,6 +309,8 @@ inline auto cusolver_potrs(
 
 #else
 
+// The row-major matrix is handed to LAPACK as its column-major transpose, so
+// no layout conversion is needed: getrf factors A^T and getrs solves with 'T'.
 template <supported_float T>
 inline auto lapacke_getrf(
   T* XPU_RESTRICT matrix,
@@ -305,14 +323,14 @@ inline auto lapacke_getrf(
 
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetrf(
-      LAPACK_ROW_MAJOR,
+      LAPACK_COL_MAJOR,
       vendor_order, vendor_order,
       matrix, vendor_stride,
       pivot
     );
   } else {
     return LAPACKE_dgetrf(
-      LAPACK_ROW_MAJOR,
+      LAPACK_COL_MAJOR,
       vendor_order, vendor_order,
       matrix, vendor_stride,
       pivot
@@ -331,13 +349,13 @@ inline auto lapacke_potrf(
 
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_spotrf(
-      LAPACK_ROW_MAJOR, 'L',
+      LAPACK_COL_MAJOR, 'U',
       vendor_order,
       matrix, vendor_stride
-    ); // use lower triangular
+    ); // column-major upper is the row-major lower triangle
   } else {
     return LAPACKE_dpotrf(
-      LAPACK_ROW_MAJOR, 'L',
+      LAPACK_COL_MAJOR, 'U',
       vendor_order,
       matrix, vendor_stride
     );
@@ -356,14 +374,14 @@ inline auto lapacke_getri(
 
   if constexpr (std::same_as<T, float>) {
     return LAPACKE_sgetri(
-      LAPACK_ROW_MAJOR,
+      LAPACK_COL_MAJOR,
       vendor_order,
       inverse, vendor_stride,
       pivot
     );
   } else {
     return LAPACKE_dgetri(
-      LAPACK_ROW_MAJOR,
+      LAPACK_COL_MAJOR,
       vendor_order,
       inverse, vendor_stride,
       pivot
@@ -383,20 +401,20 @@ inline auto lapacke_getrs(
   const auto vendor_stride{xpu::detail::checked_cast<lapack_int>(stride)};
 
   if constexpr (std::same_as<T, float>) {
-    return LAPACKE_sgetrs(
-      LAPACK_ROW_MAJOR, 'N',
+    return LAPACKE_sgetrs_work(
+      LAPACK_COL_MAJOR, 'T',
       vendor_order, 1,
       lower_upper, vendor_stride,
       pivot,
-      solution, 1
+      solution, vendor_order
     );
   } else {
-    return LAPACKE_dgetrs(
-      LAPACK_ROW_MAJOR, 'N',
+    return LAPACKE_dgetrs_work(
+      LAPACK_COL_MAJOR, 'T',
       vendor_order, 1,
       lower_upper, vendor_stride,
       pivot,
-      solution, 1
+      solution, vendor_order
     );
   }
 }
@@ -412,18 +430,18 @@ inline auto lapacke_potrs(
   const auto vendor_stride{xpu::detail::checked_cast<lapack_int>(stride)};
 
   if constexpr (std::same_as<T, float>) {
-    return LAPACKE_spotrs(
-      LAPACK_ROW_MAJOR, 'L',
+    return LAPACKE_spotrs_work(
+      LAPACK_COL_MAJOR, 'U',
       vendor_order, 1,
       lower_upper, vendor_stride,
-      solution, 1
+      solution, vendor_order
     );
   } else {
-    return LAPACKE_dpotrs(
-      LAPACK_ROW_MAJOR, 'L',
+    return LAPACKE_dpotrs_work(
+      LAPACK_COL_MAJOR, 'U',
       vendor_order, 1,
       lower_upper, vendor_stride,
-      solution, 1
+      solution, vendor_order
     );
   }
 }
@@ -469,16 +487,45 @@ inline auto transpose_square(
 
   xpu::parallel_for(range, transpose);
 #else
-  for (auto row{0uz}; row < order; ++row) {
-    for (auto column{row + 1uz}; column < order; ++column) {
-      const auto col_idx{row * stride + column};
-      const auto row_idx{column * stride + row};
+  constexpr auto tile{32uz};
+  constexpr auto parallel_order{512uz};
+  const auto tiles{xpu::ceiling_div(order, tile)};
 
-      std::swap(
-        matrix[col_idx],
-        matrix[row_idx]
-      );
+  // tile by tile, both swapped cache lines stay resident
+  const auto transpose_tile_row{[=](std::size_t tile_row) {
+    const auto row_begin{tile_row * tile};
+    const auto row_end{xpu::min(order, row_begin + tile)};
+
+    for (auto column_begin{row_begin}; column_begin < order; column_begin += tile) {
+      const auto column_end{xpu::min(order, column_begin + tile)};
+
+      for (auto row{row_begin}; row < row_end; ++row) {
+        for (auto column{xpu::max(column_begin, row + 1uz)}; column < column_end; ++column) {
+          const auto col_idx{row * stride + column};
+          const auto row_idx{column * stride + row};
+
+          std::swap(
+            matrix[col_idx],
+            matrix[row_idx]
+          );
+        }
+      }
     }
+  }};
+
+  const auto serial{order < parallel_order};
+
+  if (serial) {
+    for (auto tile_row{0uz}; tile_row < tiles; ++tile_row) {
+      transpose_tile_row(tile_row);
+    }
+
+    return;
+  }
+
+  #pragma omp parallel for schedule(dynamic)
+  for (auto tile_row = 0uz; tile_row < tiles; ++tile_row) {
+    transpose_tile_row(tile_row);
   }
 #endif
 }
@@ -525,17 +572,13 @@ public:
     : order_{checked_order(order, stride)}
     , stride_{stride}
 #if defined(XPU_CUDA)
-    , handle_{detail::create_cusolver_handle()}
+    , handle_{detail::shared_cusolver_handle()}
     , workspace_{detail::potrf_workspace_size<T>(handle_, order, stride)}
     , info_{1uz}
 #endif
   { }
 
-  ~cholesky_factorization() {
-#if defined(XPU_CUDA)
-    xpu::cu_check(cusolverDnDestroy(handle_));
-#endif
-  }
+  ~cholesky_factorization() = default;
 
   [[nodiscard]]
   constexpr auto order() const noexcept -> std::size_t {
@@ -603,12 +646,6 @@ public:
       solution, order_,
       info_.data()
     );
-
-    auto info{0};
-    xpu::copy_n(&info, info_.data(), 1uz);
-    if (info != 0) {
-      detail::linalg_error("cuSOLVER potrs received an invalid argument");
-    }
 #else
     const auto info{
       detail::lapacke_potrs(factor, solution, order_, stride_)
@@ -671,7 +708,7 @@ public:
     , stride_{stride}
 #if defined(XPU_CUDA)
     , pivot_{order}
-    , handle_{detail::create_cusolver_handle()}
+    , handle_{detail::shared_cusolver_handle()}
     , workspace_{detail::getrf_workspace_size<T>(handle_, order, stride)}
     , info_{1uz}
 #else
@@ -679,11 +716,7 @@ public:
 #endif
   { }
 
-  ~lu_factorization() {
-#if defined(XPU_CUDA)
-    xpu::cu_check(cusolverDnDestroy(handle_));
-#endif
-  }
+  ~lu_factorization() = default;
 
   [[nodiscard]]
   constexpr auto order() const noexcept -> std::size_t {
@@ -752,12 +785,6 @@ public:
       solution, order_,
       info_.data()
     );
-
-    auto info{0};
-    xpu::copy_n(&info, info_.data(), 1uz);
-    if (info != 0) {
-      detail::linalg_error("cuSOLVER getrs received an invalid argument");
-    }
 #else
     const auto info{
       detail::lapacke_getrs(
@@ -806,12 +833,6 @@ public:
       inverse, stride_,
       info_.data()
     );
-
-    auto info{0};
-    xpu::copy_n(&info, info_.data(), 1uz);
-    if (info != 0) {
-      detail::linalg_error("cuSOLVER getrs received an invalid argument");
-    }
 #else
     for (auto row{0uz}; row < order_; ++row) {
       xpu::copy_n(

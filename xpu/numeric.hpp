@@ -13,7 +13,6 @@
 namespace xpu {
 
 namespace numbers = xstd::numbers;
-
 using xstd::numeric_limits;
 
 } // namespace xpu

@@ -98,6 +98,24 @@ inline int run_buffer_cases() {
     }
   }
 
+  auto raw{xpu::buffer<float>{test::count, xpu::uninitialized}};
+  if (raw.count() != test::count || raw.capacity() != values.capacity() || raw.data() == nullptr) {
+    return test::fail("uninitialized buffer state is incorrect");
+  }
+
+  xpu::fill_n(raw.data(), raw.capacity(), 2.0f);
+  xpu::copy_n(result.get(), raw.data(), raw.capacity());
+  for (auto i{0uz}; i < raw.capacity(); ++i) {
+    if (result[i] != 2.0f) {
+      return test::fail("uninitialized buffer storage is not writable");
+    }
+  }
+
+  auto empty_raw{xpu::buffer<int>{0uz, xpu::uninitialized}};
+  if (empty_raw.count() != 0uz || empty_raw.data() != nullptr) {
+    return test::fail("empty uninitialized buffer state is incorrect");
+  }
+
   auto empty{xpu::buffer<int>{0uz}};
   if (empty.count() != 0uz || empty.capacity() != 0uz || empty.data() != nullptr) {
     return test::fail("empty buffer state is incorrect");
